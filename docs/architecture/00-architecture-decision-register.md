@@ -2,7 +2,7 @@
 
 * **Status**: Approved (Frozen)
 * **Last Updated**: 2026-08-05
-* **Deciders**: Technical Architect (Antigravity), Project Owner
+* **Deciders**: Project Owner
 
 ---
 
@@ -405,8 +405,3 @@ A concise reference for canonical terms used in NexusFlow:
 *   **Register Scopes Focused**: Confirmed. Focus remains strictly on single-node correctness, transactional boundaries, and worker interfaces.
 *   **No Duplications**: Verified. The relationship mapping explicitly resolves boundaries between scheduling eligibility (ADR-005) and execution logging (ADR-014).
 *   **Maintenance & Onboarding**: The additions of explicit vocabulary, dod checklist, and out-of-scope boundaries significantly ease the process of onboarding new engineers or reviewing decisions during interviews.
-
-#### 16.2 Recommendation
-The Architecture Decision Register is now permanently frozen. 
-
-**It is recommended to proceed to Wave 1: ADR-001 (Internal Workflow Specification).**
