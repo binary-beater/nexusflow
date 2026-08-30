@@ -189,7 +189,7 @@ An existing ADR should be updated (without creating a new one) if:
 ### Foundation (Definition & Representation)
 | ID | Title | Status | Criticality | Owner | Relationships |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ADR-001** | Internal Workflow Specification (IWS) | Planned | **Critical** | Core Data Model | • **Implements**: Capability 1<br>• **Related To**: ADR-002, ADR-003 |
+| **ADR-001** | Internal Workflow Specification (IWS) | Under Review | **Critical** | Core Data Model | • **Implements**: Capability 1<br>• **Related To**: ADR-002, ADR-003 |
 | **ADR-002** | Workflow Definition Parsing Strategy | Planned | **Core** | Parser Engine | • **Depends On**: ADR-001<br>• **Implements**: FR-WDV-001, FR-WDV-004 |
 | **ADR-003** | Canonical Workflow Graph Representation | Planned | **Critical** | Graph Core | • **Depends On**: ADR-001<br>• **Implements**: Capability 4 |
 | **ADR-004** | Workflow Validation Strategy | Planned | **Core** | Graph Validator | • **Depends On**: ADR-003<br>• **Implements**: FR-WDV-008, FR-WDV-009 |
