@@ -191,25 +191,25 @@ An existing ADR should be updated (without creating a new one) if:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **ADR-001** | Internal Workflow Specification (IWS) | Under Review | **Critical** | Core Data Model | • **Implements**: Capability 1<br>• **Related To**: ADR-002, ADR-003 |
 | **ADR-002** | Workflow Definition Parsing Strategy | Planned | **Core** | Parser Engine | • **Depends On**: ADR-001<br>• **Implements**: FR-WDV-001, FR-WDV-004 |
-| **ADR-003** | Canonical Workflow Graph Representation | Planned | **Critical** | Graph Core | • **Depends On**: ADR-001<br>• **Implements**: Capability 4 |
-| **ADR-004** | Workflow Validation Strategy | Planned | **Core** | Graph Validator | • **Depends On**: ADR-003<br>• **Implements**: FR-WDV-008, FR-WDV-009 |
+| **ADR-003** | Canonical Workflow Graph Representation | Approved | **Critical** | Graph Core | • **Depends On**: ADR-001<br>• **Implements**: Capability 4 |
+| **ADR-004** | Workflow Validation Strategy | Approved | **Core** | Graph Validator | • **Depends On**: ADR-003<br>• **Implements**: FR-WDV-008, FR-WDV-009 |
 
 ### Execution & Worker Coordination
 | ID | Title | Status | Criticality | Owner | Relationships |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ADR-005** | Scheduler Architecture | Planned | **Critical** | Scheduler Behavior | • **Depends On**: ADR-003, ADR-004<br>• **Implements**: Capability 3 |
-| **ADR-006** | Workflow Execution State Machine | Planned | **Critical** | Workflow Lifecycle | • **Depends On**: ADR-003<br>• **Implements**: Capability 6 |
-| **ADR-007** | Task Execution Lifecycle & Attempt Model | Planned | **Critical** | Task Lifecycle | • **Depends On**: ADR-006<br>• **Implements**: Capability 7 |
-| **ADR-008** | Worker Coordination & Liveness Model | Planned | **Core** | Worker Coordination | • **Depends On**: ADR-007<br>• **Implements**: Capability 5 |
-| **ADR-009** | Task Routing Strategy | Planned | **Supporting** | Task Routing | • **Depends On**: ADR-008<br>• **Related To**: ADR-005 |
-| **ADR-010** | Workflow Data Flow Model | Planned | **Core** | Payload Handling | • **Depends On**: ADR-001, ADR-007<br>• **Implements**: Capability 10 |
+| **ADR-005** | Workflow Task Scheduling & Dispatch Architecture | Approved (not Frozen) | **Critical** | Scheduler Behavior | • **Depends On**: ADR-003, ADR-004<br>• **Implements**: Capability 3 |
+| **ADR-006** | Workflow Execution State Machine | Approved | **Critical** | Workflow Lifecycle | • **Depends On**: ADR-003<br>• **Implements**: Capability 6 |
+| **ADR-007** | Task Execution Lifecycle & Attempt Model | Approved | **Critical** | Task Lifecycle | • **Depends On**: ADR-006<br>• **Implements**: Capability 7 |
+| **ADR-008** | Worker Coordination & Liveness Model | Approved | **Core** | Worker Coordination | • **Depends On**: ADR-007<br>• **Implements**: Capability 5 |
+| **ADR-009** | Task Routing Strategy | Approved | **Supporting** | Task Routing | • **Depends On**: ADR-008<br>• **Related To**: ADR-005 |
+| [**ADR-010**](adr-010-workflow-data-flow-and-parameter-passing.md) | Workflow Data Flow & Parameter Passing | Approved | **Core** | Payload Handling | • **Depends On**: ADR-001, ADR-007<br>• **Implements**: Capability 10 |
 
 ### Reliability & Durability
 | ID | Title | Status | Criticality | Owner | Relationships |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ADR-011** | State Persistence Strategy | Planned | **Critical** | Persistence | • **Depends On**: ADR-006, ADR-007<br>• **Implements**: Capability 10 |
-| **ADR-012** | Recovery Strategy | Planned | **Critical** | Recovery | • **Depends On**: ADR-011<br>• **Implements**: Capability 12 |
-| **ADR-013** | Consistency & Concurrency Strategy | Planned | **Critical** | Consistency | • **Depends On**: ADR-011<br>• **Implements**: NFR-COR-001 |
+| [**ADR-011**](adr-011-state-persistence-strategy.md) | State Persistence Strategy | Approved | **Critical** | Persistence | • **Depends On**: ADR-006, ADR-007<br>• **Implements**: Capability 10 |
+| [**ADR-012**](adr-012-recovery-strategy.md) | Recovery Strategy | Approved | **Critical** | Recovery | • **Depends On**: ADR-011<br>• **Implements**: Capability 12 |
+| [**ADR-013**](adr-013-consistency-and-concurrency-strategy.md) | Consistency & Concurrency Strategy | Approved | **Critical** | Consistency | • **Depends On**: ADR-011<br>• **Implements**: NFR-COR-001 |
 | **ADR-014** | History & Audit Model | Planned | **Core** | Execution History | • **Depends On**: ADR-011<br>• **Implements**: Capability 11 |
 | **ADR-017** | Graceful Shutdown Strategy | Planned | **Supporting** | Lifecycle Drain | • **Depends On**: ADR-008, ADR-011<br>• **Implements**: NFR-REL-003 |
 | **ADR-018** | Error Handling Philosophy | Planned | **Core** | Exception Handling | • **Depends On**: ADR-007<br>• **Related To**: ADR-012 |
