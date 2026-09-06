@@ -210,20 +210,20 @@ An existing ADR should be updated (without creating a new one) if:
 | [**ADR-011**](adr-011-state-persistence-strategy.md) | State Persistence Strategy | Approved | **Critical** | Persistence | • **Depends On**: ADR-006, ADR-007<br>• **Implements**: Capability 10 |
 | [**ADR-012**](adr-012-recovery-strategy.md) | Recovery Strategy | Approved | **Critical** | Recovery | • **Depends On**: ADR-011<br>• **Implements**: Capability 12 |
 | [**ADR-013**](adr-013-consistency-and-concurrency-strategy.md) | Consistency & Concurrency Strategy | Approved | **Critical** | Consistency | • **Depends On**: ADR-011<br>• **Implements**: NFR-COR-001 |
-| **ADR-014** | History & Audit Model | Planned | **Core** | Execution History | • **Depends On**: ADR-011<br>• **Implements**: Capability 11 |
-| **ADR-017** | Graceful Shutdown Strategy | Planned | **Supporting** | Lifecycle Drain | • **Depends On**: ADR-008, ADR-011<br>• **Implements**: NFR-REL-003 |
-| **ADR-018** | Error Handling Philosophy | Planned | **Core** | Exception Handling | • **Depends On**: ADR-007<br>• **Related To**: ADR-012 |
+| [**ADR-014**](adr-014-execution-history-and-audit-model.md) | Execution History & Audit Model | Approved | **Core** | Execution History | • **Depends On**: ADR-011<br>• **Implements**: Capability 11 |
+| [**ADR-017**](adr-017-graceful-shutdown-architecture.md) | Graceful Shutdown Strategy | Approved | **Supporting** | Lifecycle Drain | • **Depends On**: ADR-008, ADR-011<br>• **Implements**: NFR-REL-003 |
+| [**ADR-018**](adr-018-error-handling-philosophy.md) | Error Handling Philosophy | Approved | **Core** | Exception Handling | • **Depends On**: ADR-007<br>• **Related To**: ADR-012 |
 
 ### Platform & Integration
 | ID | Title | Status | Criticality | Owner | Relationships |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ADR-015** | API Architecture | Planned | **Core** | API Contracts | • **Depends On**: ADR-001, ADR-006<br>• **Implements**: Capability 13 |
-| **ADR-016** | Observability Architecture | Planned | **Supporting** | Observability | • **Depends On**: ADR-014<br>• **Implements**: Capability 14 |
-| **ADR-019** | Project Modularity & Service Boundaries | Planned | **Supporting** | Module Topography | • **Related To**: ADR-001 |
-| **ADR-020** | Technology Selection Strategy | Planned | **Core** | Technology Choices | • **Depends On**: ADR-010, ADR-011, ADR-015 |
-| **ADR-021** | Testing Strategy | Planned | **Supporting** | Testing | • **Implements**: NFR-TST-001 |
-| **ADR-022** | Security Model (Version 1) | Planned | **Supporting** | Security Policies | • **Depends On**: ADR-015 |
-| **ADR-023** | Configuration Strategy | Planned | **Supporting** | Configuration | • **Implements**: NFR-POR-003 |
+| [**ADR-015**](adr-015-external-api-architecture.md) | External API Architecture | Approved | **Core** | API Contracts | • **Depends On**: ADR-001, ADR-006<br>• **Implements**: Capability 13 |
+| [**ADR-016**](adr-016-observability-architecture.md) | Observability Architecture | Approved | **Supporting** | Observability | • **Depends On**: ADR-014<br>• **Implements**: Capability 14 |
+| [**ADR-019**](adr-019-project-and-service-boundaries.md) | Project Modularity & Service Boundaries | Approved | **Supporting** | Module Topography | • **Related To**: ADR-001 |
+| [**ADR-020**](adr-020-technology-selection.md) | Technology Selection Strategy | Approved | **Core** | Technology Choices | • **Depends On**: ADR-010, ADR-011, ADR-015 |
+| [**ADR-021**](adr-021-testing-strategy.md) | Testing Strategy | Approved (not Frozen) | **Core** | Verification Architecture | • **Depends On**: ADR-001 through ADR-020<br>• **Implements**: NFR-TST-001 |
+| [**ADR-022**](adr-022-security-architecture.md) | Security Architecture | Approved (not Frozen) | **Core** | Security Architecture | • **Depends On**: ADR-008, ADR-015, ADR-018, ADR-020, ADR-021<br>• **Implements**: NFR-SEC-001 |
+| [**ADR-023**](adr-023-configuration-architecture.md) | Configuration Architecture | Approved (not Frozen) | **Core** | Configuration Architecture | • **Depends On**: ADR-001 through ADR-022<br>• **Implements**: NFR-POR-003 |
 
 ### Future (Deferred to Version 2+)
 | ID | Title | Status | Criticality | Owner | Relationships |
