@@ -1,12 +1,39 @@
-"""FastAPI Application Factory for NexusFlow V1 (LLD-08, LLD-09)."""
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from nexusflow.interfaces.http.dependencies import (
+    get_scheduler,
+    get_session_factory,
+    get_startup_recovery_gate,
+    get_worker_registry,
+)
 from nexusflow.interfaces.http.errors import ApiHttpException, ErrorPayload, StandardErrorEnvelope
 from nexusflow.interfaces.http.routes.definitions import router as definitions_router
 from nexusflow.interfaces.http.routes.health import router as health_router
+from nexusflow.orchestration.recovery import StartupRecoveryEngine
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Run deterministic startup recovery
+    session_factory = get_session_factory()
+    registry = get_worker_registry()
+    scheduler = get_scheduler(session_factory, registry)
+    gate = get_startup_recovery_gate()
+
+    recovery_engine = StartupRecoveryEngine(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        worker_registry=registry,
+    )
+    await recovery_engine.recover_system()
+    gate.mark_recovery_completed()
+
+    yield
 
 
 def create_app() -> FastAPI:
@@ -16,6 +43,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     # Standardized error handlers (ADR-018, LLD-08 Section 15)

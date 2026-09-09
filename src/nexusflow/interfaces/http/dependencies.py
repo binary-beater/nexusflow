@@ -42,27 +42,37 @@ class RecoveryGateProtocol(Protocol):
     def allows_existing_settlement(self) -> bool: ...
 
 
-class SimpleRecoveryGate:
-    """Phase 1 RecoveryGate implementation.
+class StartupRecoveryGate:
+    """Startup recovery gate controlling traffic admission during startup reconciliation."""
 
-    In Phase 1, recovery engine is not yet running, so we default allows_new_work to True
-    to enable definition registration, while honoring the protocol.
-    """
+    def __init__(self, completed: bool = True) -> None:
+        self._recovery_completed = completed
+
+    def mark_recovery_completed(self) -> None:
+        self._recovery_completed = True
+
+    def mark_recovery_started(self) -> None:
+        self._recovery_completed = False
 
     def is_recovery_complete(self) -> bool:
-        return True
+        return self._recovery_completed
 
     def allows_new_work(self) -> bool:
-        return True
+        return self._recovery_completed
 
     def allows_existing_settlement(self) -> bool:
         return True
 
 
-_recovery_gate = SimpleRecoveryGate()
+SimpleRecoveryGate = StartupRecoveryGate
+_recovery_gate = StartupRecoveryGate(completed=True)
 
 
 def get_recovery_gate() -> RecoveryGateProtocol:
+    return _recovery_gate
+
+
+def get_startup_recovery_gate() -> StartupRecoveryGate:
     return _recovery_gate
 
 

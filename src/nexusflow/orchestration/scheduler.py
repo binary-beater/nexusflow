@@ -6,15 +6,18 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nexusflow.definition.codec import deserialize_validated_spec
+from nexusflow.domain.enums import FailureCategory
 from nexusflow.domain.execution import OutputCommitted
+from nexusflow.domain.failure import FailureCause
 from nexusflow.domain.identifiers import (
     AttemptId,
     TaskDefinitionId,
     TaskExecutionId,
+    WorkerSessionId,
     WorkflowExecutionId,
 )
 from nexusflow.domain.json_compat import freeze_json
@@ -26,6 +29,7 @@ from nexusflow.domain.readiness import (
 )
 from nexusflow.orchestration.registry import WorkerRegistry
 from nexusflow.persistence.orm import (
+    ExecutionAttemptRecord,
     RegisteredDefinitionRecord,
     TaskExecutionRecord,
     WorkflowExecutionRecord,
@@ -33,7 +37,14 @@ from nexusflow.persistence.orm import (
 from nexusflow.persistence.transactions import (
     CommitStatus,
     commit_attempt_ownership,
+    commit_drain_task_cancellation,
+    commit_internal_attempt_failure,
+    commit_internal_cancellation_deadline,
+    commit_retry_ready,
     commit_task_readiness,
+    commit_workflow_cancellation,
+    commit_workflow_failure,
+    commit_workflow_failure_direction,
     commit_workflow_success,
 )
 
@@ -74,7 +85,14 @@ class ExecutionScheduler:
                 )
             ).one_or_none()
 
-            if wf_row is None or wf_row.state != "RUNNING":
+            if wf_row is None:
+                return
+
+            if wf_row.state in ["FAILING", "CANCELLING"]:
+                await self.drain_workflow(workflow_id)
+                return
+
+            if wf_row.state != "RUNNING":
                 return
 
             def_row = (
@@ -108,6 +126,19 @@ class ExecutionScheduler:
         if all_succeeded:
             await self._try_succeed_workflow(wf_row, spec, task_rows)
             return
+
+        # Check for due RETRY_WAIT tasks and promote to RUNNABLE
+        now_utc = datetime.now(UTC)
+        for task_row in task_rows:
+            if task_row.state == "RETRY_WAIT" and task_row.retry_ready_at_utc and task_row.retry_ready_at_utc <= now_utc:
+                async with self._session_factory() as session:
+                    await commit_retry_ready(
+                        session=session,
+                        task_id=TaskExecutionId(task_row.task_execution_id),
+                        expected_task_revision=task_row.revision,
+                        workflow_id=workflow_id,
+                        now_utc=now_utc,
+                    )
 
         # 3. For any task in PENDING, evaluate readiness
         for task_row in task_rows:
@@ -251,3 +282,274 @@ class ExecutionScheduler:
                 output=OutputCommitted(value=resolved_output),
                 now_utc=now_utc,
             )
+
+    async def drain_workflow(self, workflow_id: WorkflowExecutionId) -> None:
+        """Processes workflow drain for FAILING and CANCELLING workflows (LLD-06 Section 9).
+
+        1. Cancels unstarted tasks (PENDING, RUNNABLE, RETRY_WAIT).
+        2. Populates cancellation deadlines and queues best-effort cancellation for active attempts.
+        3. If all tasks are terminal, commits terminal workflow state (FAILED or CANCELLED).
+        """
+        async with self._session_factory() as session:
+            wf_row = (
+                await session.execute(
+                    select(
+                        WorkflowExecutionRecord.workflow_execution_id,
+                        WorkflowExecutionRecord.state,
+                        WorkflowExecutionRecord.revision,
+                    ).where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+                )
+            ).one_or_none()
+
+            if wf_row is None or wf_row.state not in ["FAILING", "CANCELLING"]:
+                return
+
+            task_rows = (
+                await session.execute(
+                    select(TaskExecutionRecord).where(
+                        TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                    )
+                )
+            ).scalars().all()
+
+        now_utc = datetime.now(UTC)
+
+        # 1. Cancel unstarted tasks
+        for t in task_rows:
+            if t.state in ["PENDING", "RUNNABLE", "RETRY_WAIT"]:
+                async with self._session_factory() as session:
+                    await commit_drain_task_cancellation(
+                        session=session,
+                        task_id=TaskExecutionId(t.task_execution_id),
+                        expected_task_revision=t.revision,
+                        now_utc=now_utc,
+                    )
+                    await session.commit()
+
+        # 2. Sweep active attempts for cancellation notice / deadline
+        async with self._session_factory() as session:
+            active_attempts = (
+                await session.execute(
+                    select(ExecutionAttemptRecord)
+                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .where(
+                        TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                        ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                    )
+                )
+            ).scalars().all()
+
+        for att in active_attempts:
+            # If cancellation deadline has elapsed, settle internal cancellation
+            if att.cancellation_deadline_utc and att.cancellation_deadline_utc <= now_utc:
+                async with self._session_factory() as session:
+                    task = await session.get(TaskExecutionRecord, att.task_execution_id)
+                    if task and task.state == "RUNNING":
+                        await commit_internal_cancellation_deadline(
+                            session=session,
+                            attempt_id=AttemptId(att.attempt_id),
+                            expected_attempt_revision=att.revision,
+                            task_id=TaskExecutionId(att.task_execution_id),
+                            expected_task_revision=task.revision,
+                            now_utc=now_utc,
+                        )
+                        await session.commit()
+            elif not att.cancellation_deadline_utc:
+                # Materialize cancellation deadline (10 seconds)
+                cancel_deadline = now_utc + timedelta(seconds=10.0)
+                async with self._session_factory() as session:
+                    await session.execute(
+                        update(ExecutionAttemptRecord)
+                        .where(ExecutionAttemptRecord.attempt_id == att.attempt_id)
+                        .values(cancellation_deadline_utc=cancel_deadline)
+                    )
+                    await session.commit()
+
+                # Queue best-effort cancellation hint to worker
+                cancel_cmd = {
+                    "attempt_id": str(att.attempt_id),
+                    "worker_session_id": str(att.worker_session_id),
+                    "task_execution_id": str(att.task_execution_id),
+                    "workflow_execution_id": str(workflow_id.value),
+                    "reason": f"Workflow {wf_row.state.lower()}",
+                }
+                await self._worker_registry.queue_delivery(
+                    WorkerSessionId(att.worker_session_id),
+                    {"status": "CANCEL_COMMAND", "cancellation": cancel_cmd},
+                )
+
+        # 3. Check terminalization eligibility
+        async with self._session_factory() as session:
+            updated_tasks = (
+                await session.execute(
+                    select(TaskExecutionRecord).where(
+                        TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                    )
+                )
+            ).scalars().all()
+
+            all_terminal = all(t.state in ["SUCCEEDED", "FAILED", "CANCELLED"] for t in updated_tasks)
+            if all_terminal:
+                current_wf = (
+                    await session.execute(
+                        select(WorkflowExecutionRecord).where(
+                            WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
+                        )
+                    )
+                ).scalar_one_or_none()
+                if current_wf is not None:
+                    if current_wf.state == "FAILING":
+                        await commit_workflow_failure(
+                            session=session,
+                            workflow_id=workflow_id,
+                            expected_workflow_revision=current_wf.revision,
+                            now_utc=now_utc,
+                        )
+                        await session.commit()
+                    elif current_wf.state == "CANCELLING":
+                        await commit_workflow_cancellation(
+                            session=session,
+                            workflow_id=workflow_id,
+                            expected_workflow_revision=current_wf.revision,
+                            now_utc=now_utc,
+                        )
+                        await session.commit()
+
+    async def sweep_timeouts_and_deadlines(self) -> int:
+        """Periodic / defensive sweeper for expired start deadlines, execution timeouts, and cancellation deadlines."""
+        now_utc = datetime.now(UTC)
+        settled_count = 0
+
+        async with self._session_factory() as session:
+            # 1. Expired start deadlines on CLAIMED attempts
+            expired_claims = (
+                await session.execute(
+                    select(ExecutionAttemptRecord, TaskExecutionRecord)
+                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .where(
+                        ExecutionAttemptRecord.state == "CLAIMED",
+                        ExecutionAttemptRecord.start_deadline_utc <= now_utc,
+                    )
+                    .limit(50)
+                )
+            ).all()
+
+        for att, task in expired_claims:
+            cause = FailureCause(
+                category=FailureCategory.TIME_BASED,
+                code="START_DEADLINE_EXPIRED",
+                message="Worker did not acknowledge start before start_deadline_utc",
+            )
+            retry_ready = now_utc + timedelta(seconds=5.0)
+            async with self._session_factory() as session:
+                outcome, wf_id, new_state = await commit_internal_attempt_failure(
+                    session=session,
+                    attempt_id=AttemptId(att.attempt_id),
+                    expected_attempt_revision=att.revision,
+                    task_id=TaskExecutionId(task.task_execution_id),
+                    expected_task_revision=task.revision,
+                    cause=cause,
+                    is_retryable=True,
+                    retry_ready_at_utc=retry_ready,
+                    expected_lost_worker_session_id=None,
+                    now_utc=now_utc,
+                )
+                if outcome.status == CommitStatus.COMMITTED and wf_id:
+                    settled_count += 1
+                    if new_state == "FAILED":
+                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await self.drain_workflow(WorkflowExecutionId(wf_id))
+
+        async with self._session_factory() as session:
+            # 2. Expired execution timeouts on RUNNING attempts
+            expired_timeouts = (
+                await session.execute(
+                    select(ExecutionAttemptRecord, TaskExecutionRecord)
+                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .where(
+                        ExecutionAttemptRecord.state == "RUNNING",
+                        ExecutionAttemptRecord.execution_timeout_utc.is_not(None),
+                        ExecutionAttemptRecord.execution_timeout_utc <= now_utc,
+                    )
+                    .limit(50)
+                )
+            ).all()
+
+        for att, task in expired_timeouts:
+            cause = FailureCause(
+                category=FailureCategory.TIME_BASED,
+                code="EXECUTION_TIMEOUT",
+                message="Activity execution exceeded configured execution timeout",
+            )
+            retry_ready = now_utc + timedelta(seconds=5.0)
+            async with self._session_factory() as session:
+                outcome, wf_id, new_state = await commit_internal_attempt_failure(
+                    session=session,
+                    attempt_id=AttemptId(att.attempt_id),
+                    expected_attempt_revision=att.revision,
+                    task_id=TaskExecutionId(task.task_execution_id),
+                    expected_task_revision=task.revision,
+                    cause=cause,
+                    is_retryable=True,
+                    retry_ready_at_utc=retry_ready,
+                    expected_lost_worker_session_id=None,
+                    now_utc=now_utc,
+                )
+                if outcome.status == CommitStatus.COMMITTED and wf_id:
+                    settled_count += 1
+                    if new_state == "FAILED":
+                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await self.drain_workflow(WorkflowExecutionId(wf_id))
+
+        return settled_count
+
+    async def sweep_worker_loss(self) -> int:
+        """Arbitrates worker session loss for active attempts owned by non-live sessions."""
+        now_utc = datetime.now(UTC)
+        lost_sessions = await self._worker_registry.find_lost_sessions()
+        if not lost_sessions:
+            return 0
+
+        settled = 0
+        lost_ids = [s.value for s in lost_sessions]
+
+        async with self._session_factory() as session:
+            orphan_attempts = (
+                await session.execute(
+                    select(ExecutionAttemptRecord, TaskExecutionRecord)
+                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .where(
+                        ExecutionAttemptRecord.worker_session_id.in_(lost_ids),
+                        ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                    )
+                    .limit(50)
+                )
+            ).all()
+
+        for att, task in orphan_attempts:
+            cause = FailureCause(
+                category=FailureCategory.WORKER_AVAILABILITY,
+                code="WORKER_LOSS",
+                message="Worker session heartbeat timed out / lost",
+            )
+            retry_ready = now_utc + timedelta(seconds=5.0)
+            async with self._session_factory() as session:
+                outcome, wf_id, new_state = await commit_internal_attempt_failure(
+                    session=session,
+                    attempt_id=AttemptId(att.attempt_id),
+                    expected_attempt_revision=att.revision,
+                    task_id=TaskExecutionId(task.task_execution_id),
+                    expected_task_revision=task.revision,
+                    cause=cause,
+                    is_retryable=True,
+                    retry_ready_at_utc=retry_ready,
+                    expected_lost_worker_session_id=WorkerSessionId(att.worker_session_id),
+                    now_utc=now_utc,
+                )
+                if outcome.status == CommitStatus.COMMITTED and wf_id:
+                    settled += 1
+                    if new_state == "FAILED":
+                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await self.drain_workflow(WorkflowExecutionId(wf_id))
+
+        return settled

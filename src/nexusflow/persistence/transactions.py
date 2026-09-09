@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -22,6 +22,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nexusflow.domain.execution import OutputCommitted, WorkflowExecution
+from nexusflow.domain.failure import FailureCause
 from nexusflow.domain.identifiers import (
     AttemptId,
     DefinitionId,
@@ -789,6 +790,856 @@ async def commit_workflow_success(
                 attempt_id=None,
                 event_category="WorkflowExecutionSucceeded",
                 event_payload={"has_output": True},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+# =====================================================================
+# Phase 3: Failure, Retry, Timeout, Cancellation & Drain Transactions
+# =====================================================================
+
+
+async def commit_worker_failure_with_retry(
+    session: AsyncSession,
+    attempt_id: AttemptId,
+    worker_session_id: WorkerSessionId,
+    expected_attempt_revision: int,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    workflow_id: WorkflowExecutionId,
+    ready_at_utc: datetime,
+    cause: FailureCause,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Handles worker-reported retryable failure callback.
+
+    Transitions Attempt -> FAILED and Task -> RETRY_WAIT using OCC revision checks
+    and semantic predicate verifying Workflow is RUNNING and budget remains.
+    """
+    async with transactional_scope(session):
+        # 1. Verify workflow is RUNNING via OCC predicate
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
+            )
+        )
+        if wf_state != "RUNNING":
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING")
+
+        # 2. Transition Attempt -> FAILED verifying exact worker session, task, and revision
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details) if cause.details else None,
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_att: Any = await session.execute(stmt_attempt)
+        if getattr(res_att, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict or stale attempt")
+
+        # 3. Transition Task RUNNING -> RETRY_WAIT verifying budget remains
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RETRY_WAIT",
+                retry_ready_at_utc=ready_at_utc,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_task: Any = await session.execute(stmt_task)
+        if getattr(res_task, "rowcount", 0) == 0:
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message="OCC conflict or retry budget exhausted",
+            )
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="TaskExecutionRetrying",
+                event_payload={"retry_ready_at": ready_at_utc.isoformat(), "code": cause.code},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_worker_definitive_failure(
+    session: AsyncSession,
+    attempt_id: AttemptId,
+    worker_session_id: WorkerSessionId,
+    expected_attempt_revision: int,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    cause: FailureCause,
+    now_utc: datetime,
+) -> tuple[CommitOutcome, UUID | None]:
+    """Settles Attempt and Task as FAILED from a worker failure callback or exhausted retries."""
+    async with transactional_scope(session):
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details) if cause.details else None,
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_att: Any = await session.execute(stmt_attempt)
+        if getattr(res_att, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict or stale attempt"), None
+
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details) if cause.details else None,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+            .returning(TaskExecutionRecord.workflow_execution_id)
+        )
+        res_task: Any = await session.execute(stmt_task)
+        wf_id = res_task.scalar_one_or_none()
+        if wf_id is None:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on task failure"), None
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=wf_id,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="TaskExecutionFailed",
+                event_payload={"code": cause.code, "category": cause.category.value},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED), wf_id
+
+
+async def commit_workflow_failure_direction(
+    session: AsyncSession,
+    workflow_id: WorkflowExecutionId,
+    cause: FailureCause,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Transitions WorkflowExecution RUNNING -> FAILING.
+
+    Uses narrow row lock FOR UPDATE on workflow row to serialize workflow direction.
+    """
+    async with transactional_scope(session):
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord)
+                .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+
+        if wf_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not found")
+        if wf_row.state != "RUNNING":
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message=f"Workflow is not RUNNING (current: {wf_row.state})",
+            )
+
+        stmt = (
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state == "RUNNING",
+            )
+            .values(
+                state="FAILING",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details) if cause.details else None,
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res: Any = await session.execute(stmt)
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict entering FAILING")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=None,
+                attempt_id=None,
+                event_category="WorkflowExecutionFailing",
+                event_payload={"failure_code": cause.code},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_workflow_cancellation_direction(
+    session: AsyncSession,
+    workflow_id: WorkflowExecutionId,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Transitions WorkflowExecution INITIALIZING | RUNNING -> CANCELLING.
+
+    Uses narrow row lock FOR UPDATE on workflow row to serialize direction.
+    """
+    async with transactional_scope(session):
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord)
+                .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+
+        if wf_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not found")
+        if wf_row.state not in ["INITIALIZING", "RUNNING"]:
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message=f"Workflow cannot be cancelled from state {wf_row.state}",
+            )
+
+        stmt = (
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state.in_(["INITIALIZING", "RUNNING"]),
+            )
+            .values(
+                state="CANCELLING",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res: Any = await session.execute(stmt)
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict entering CANCELLING")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=None,
+                attempt_id=None,
+                event_category="WorkflowCancellationRequested",
+                event_payload={"state": "CANCELLING"},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_drain_task_cancellation(
+    session: AsyncSession,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Cancels an unstarted task (PENDING, RUNNABLE, RETRY_WAIT) during workflow drain."""
+    async with transactional_scope(session):
+        task_row = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id, TaskExecutionRecord.state).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).one_or_none()
+
+        if task_row is None or task_row.state not in ["PENDING", "RUNNABLE", "RETRY_WAIT"]:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not eligible for drain cancel")
+
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == task_row.workflow_execution_id
+            )
+        )
+        if wf_state not in ["FAILING", "CANCELLING"]:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Owning workflow is not draining")
+
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.state.in_(["PENDING", "RUNNABLE", "RETRY_WAIT"]),
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED",
+                retry_ready_at_utc=None,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res: Any = await session.execute(stmt)
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict cancelling drain task")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_row.workflow_execution_id,
+                task_execution_id=task_id.value,
+                attempt_id=None,
+                event_category="TaskExecutionCancelled",
+                event_payload={"reason": "Workflow draining"},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_worker_cancellation_ack(
+    session: AsyncSession,
+    attempt_id: AttemptId,
+    worker_session_id: WorkerSessionId,
+    expected_attempt_revision: int,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    now_utc: datetime,
+) -> tuple[CommitOutcome, UUID | None]:
+    """Settles an active Attempt and Task as CANCELLED upon receiving worker cancellation ack."""
+    async with transactional_scope(session):
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
+        if task_wf is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found"), None
+
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == task_wf
+            )
+        )
+        if wf_state not in ["FAILING", "CANCELLING"]:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state"), None
+
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_att: Any = await session.execute(stmt_attempt)
+        if getattr(res_att, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on attempt cancel ack"), None
+
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == task_wf,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_task: Any = await session.execute(stmt_task)
+        if getattr(res_task, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on task cancel ack"), None
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="AttemptCancellationAcknowledged",
+                event_payload={"worker_session_id": str(worker_session_id.value)},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED), task_wf
+
+
+async def commit_internal_cancellation_deadline(
+    session: AsyncSession,
+    attempt_id: AttemptId,
+    expected_attempt_revision: int,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    now_utc: datetime,
+) -> tuple[CommitOutcome, UUID | None]:
+    """Settles an active Attempt and Task as CANCELLED when cancellation deadline elapses."""
+    async with transactional_scope(session):
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
+        if task_wf is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found"), None
+
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == task_wf
+            )
+        )
+        if wf_state not in ["FAILING", "CANCELLING"]:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state"), None
+
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.cancellation_deadline_utc.is_not(None),
+                ExecutionAttemptRecord.cancellation_deadline_utc <= now_utc,
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_att: Any = await session.execute(stmt_attempt)
+        if getattr(res_att, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on cancel deadline"), None
+
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == task_wf,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_task: Any = await session.execute(stmt_task)
+        if getattr(res_task, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on task cancel deadline"), None
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="AttemptCancellationDeadlineExpired",
+                event_payload={"expired_at": now_utc.isoformat()},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED), task_wf
+
+
+async def commit_internal_attempt_failure(
+    session: AsyncSession,
+    attempt_id: AttemptId,
+    expected_attempt_revision: int,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    cause: FailureCause,
+    is_retryable: bool,
+    retry_ready_at_utc: datetime | None,
+    expected_lost_worker_session_id: WorkerSessionId | None,
+    now_utc: datetime,
+) -> tuple[CommitOutcome, UUID | None, str]:
+    """Unified consistency group for internal failure triggers (deadlines, timeouts, worker loss).
+
+    Transitions Attempt -> FAILED and atomically settles Task -> RETRY_WAIT (if eligible)
+    or Task -> FAILED (if budget exhausted or workflow is draining).
+    """
+    async with transactional_scope(session):
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
+        if task_wf is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found"), None, ""
+
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == task_wf
+            )
+        )
+
+        attempt_filters = [
+            ExecutionAttemptRecord.attempt_id == attempt_id.value,
+            ExecutionAttemptRecord.task_execution_id == task_id.value,
+            ExecutionAttemptRecord.revision == expected_attempt_revision,
+        ]
+        if cause.code == "START_DEADLINE_EXPIRED":
+            attempt_filters.append(ExecutionAttemptRecord.state == "CLAIMED")
+            attempt_filters.append(ExecutionAttemptRecord.start_deadline_utc <= now_utc)
+        elif cause.code == "EXECUTION_TIMEOUT":
+            attempt_filters.append(ExecutionAttemptRecord.state == "RUNNING")
+            attempt_filters.append(ExecutionAttemptRecord.execution_timeout_utc.is_not(None))
+            attempt_filters.append(ExecutionAttemptRecord.execution_timeout_utc <= now_utc)
+        elif cause.code == "WORKER_LOSS":
+            if expected_lost_worker_session_id is not None:
+                attempt_filters.append(ExecutionAttemptRecord.worker_session_id == expected_lost_worker_session_id.value)
+            attempt_filters.append(ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]))
+
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(*attempt_filters)
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details) if cause.details else None,
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res_att: Any = await session.execute(stmt_attempt)
+        if getattr(res_att, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict or stale attempt"), None, ""
+
+        can_retry = (wf_state == "RUNNING") and is_retryable and (retry_ready_at_utc is not None)
+        task_new_state = "FAILED"
+
+        if can_retry:
+            stmt_retry = (
+                update(TaskExecutionRecord)
+                .where(
+                    TaskExecutionRecord.task_execution_id == task_id.value,
+                    TaskExecutionRecord.workflow_execution_id == task_wf,
+                    TaskExecutionRecord.state == "RUNNING",
+                    TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
+                    TaskExecutionRecord.revision == expected_task_revision,
+                )
+                .values(
+                    state="RETRY_WAIT",
+                    retry_ready_at_utc=retry_ready_at_utc,
+                    revision=TaskExecutionRecord.revision + 1,
+                    updated_at_utc=now_utc,
+                )
+            )
+            res_retry: Any = await session.execute(stmt_retry)
+            if getattr(res_retry, "rowcount", 0) > 0:
+                task_new_state = "RETRY_WAIT"
+            else:
+                can_retry = False
+
+        if not can_retry:
+            stmt_fail = (
+                update(TaskExecutionRecord)
+                .where(
+                    TaskExecutionRecord.task_execution_id == task_id.value,
+                    TaskExecutionRecord.workflow_execution_id == task_wf,
+                    TaskExecutionRecord.state == "RUNNING",
+                    TaskExecutionRecord.revision == expected_task_revision,
+                )
+                .values(
+                    state="FAILED",
+                    failure_category=cause.category.value,
+                    failure_code=cause.code,
+                    failure_message=cause.message,
+                    failure_details=thaw_json(cause.details) if cause.details else None,
+                    revision=TaskExecutionRecord.revision + 1,
+                    updated_at_utc=now_utc,
+                )
+            )
+            res_fail: Any = await session.execute(stmt_fail)
+            if getattr(res_fail, "rowcount", 0) == 0:
+                return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on task failure"), None, ""
+            task_new_state = "FAILED"
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="InternalAttemptFailureSettled",
+                event_payload={"cause_code": cause.code, "task_state": task_new_state},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED), task_wf, task_new_state
+
+
+async def commit_retry_ready(
+    session: AsyncSession,
+    task_id: TaskExecutionId,
+    expected_task_revision: int,
+    workflow_id: WorkflowExecutionId,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Transitions TaskExecution RETRY_WAIT -> RUNNABLE when retry_ready_at_utc <= now_utc."""
+    async with transactional_scope(session):
+        wf_state = await session.scalar(
+            select(WorkflowExecutionRecord.state).where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
+            )
+        )
+        if wf_state != "RUNNING":
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING")
+
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "RETRY_WAIT",
+                TaskExecutionRecord.retry_ready_at_utc <= now_utc,
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RUNNABLE",
+                retry_ready_at_utc=None,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        res: Any = await session.execute(stmt)
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on retry timer wakeup")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                attempt_id=None,
+                event_category="TaskMarkedRunnable",
+                event_payload={"reason": "RetryTimerExpired"},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_workflow_failure(
+    session: AsyncSession,
+    workflow_id: WorkflowExecutionId,
+    expected_workflow_revision: int,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Transitions WorkflowExecution FAILING -> FAILED once all declared tasks are terminal."""
+    async with transactional_scope(session):
+        wf_row = (
+            await session.execute(
+                select(
+                    WorkflowExecutionRecord.definition_id,
+                    WorkflowExecutionRecord.revision,
+                    WorkflowExecutionRecord.state,
+                ).where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            )
+        ).one_or_none()
+
+        if wf_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not found")
+        if wf_row.state != "FAILING" or wf_row.revision != expected_workflow_revision:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="Workflow not in FAILING or revision mismatch")
+
+        def_row = await session.scalar(
+            select(RegisteredDefinitionRecord.validated_iws).where(
+                RegisteredDefinitionRecord.definition_id == wf_row.definition_id
+            )
+        )
+        if def_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Definition not found")
+
+        expected_task_ids = set(def_row["tasks"].keys())
+        terminal_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                    TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"]),
+                )
+            )
+        )
+
+        if expected_task_ids != terminal_task_ids:
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message=f"Tasks remain active or missing: {expected_task_ids - terminal_task_ids}",
+            )
+
+        res: Any = await session.execute(
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state == "FAILING",
+                WorkflowExecutionRecord.revision == expected_workflow_revision,
+            )
+            .values(
+                state="FAILED",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on workflow terminal failure")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=None,
+                attempt_id=None,
+                event_category="WorkflowExecutionFailed",
+                event_payload={"state": "FAILED"},
+                occurred_at_utc=now_utc,
+            )
+        )
+
+    return CommitOutcome(status=CommitStatus.COMMITTED)
+
+
+async def commit_workflow_cancellation(
+    session: AsyncSession,
+    workflow_id: WorkflowExecutionId,
+    expected_workflow_revision: int,
+    now_utc: datetime,
+) -> CommitOutcome:
+    """Transitions WorkflowExecution CANCELLING -> CANCELLED once all declared tasks are terminal."""
+    async with transactional_scope(session):
+        wf_row = (
+            await session.execute(
+                select(
+                    WorkflowExecutionRecord.definition_id,
+                    WorkflowExecutionRecord.revision,
+                    WorkflowExecutionRecord.state,
+                ).where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            )
+        ).one_or_none()
+
+        if wf_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not found")
+        if wf_row.state != "CANCELLING" or wf_row.revision != expected_workflow_revision:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="Workflow not in CANCELLING or revision mismatch")
+
+        def_row = await session.scalar(
+            select(RegisteredDefinitionRecord.validated_iws).where(
+                RegisteredDefinitionRecord.definition_id == wf_row.definition_id
+            )
+        )
+        if def_row is None:
+            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Definition not found")
+
+        expected_task_ids = set(def_row["tasks"].keys())
+        terminal_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                    TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"]),
+                )
+            )
+        )
+
+        if expected_task_ids != terminal_task_ids:
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message=f"Tasks remain active or missing: {expected_task_ids - terminal_task_ids}",
+            )
+
+        res: Any = await session.execute(
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state == "CANCELLING",
+                WorkflowExecutionRecord.revision == expected_workflow_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+        if getattr(res, "rowcount", 0) == 0:
+            return CommitOutcome(status=CommitStatus.OCC_CONFLICT, message="OCC conflict on workflow terminal cancellation")
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=None,
+                attempt_id=None,
+                event_category="WorkflowExecutionCancelled",
+                event_payload={"state": "CANCELLED"},
                 occurred_at_utc=now_utc,
             )
         )

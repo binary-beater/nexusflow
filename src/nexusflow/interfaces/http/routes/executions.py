@@ -296,3 +296,100 @@ async def list_history(
         )
         for r in records
     ]
+
+
+@router.post("/{workflow_id}/cancel", status_code=status.HTTP_202_ACCEPTED, response_model=ExecutionResponseDTO)
+async def cancel_execution(
+    workflow_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    scheduler: Annotated[ExecutionScheduler, Depends(get_scheduler)],
+    _ctx: Annotated[object, Depends(require_permission(PublicPermission.EXECUTIONS_CANCEL))],
+) -> ExecutionResponseDTO:
+    """Cancels a workflow execution. Transitions INITIALIZING/RUNNING -> CANCELLING, or responds idempotently."""
+    from nexusflow.persistence.transactions import (
+        commit_workflow_cancellation_direction,
+    )
+
+    wf_record = await session.scalar(
+        select(WorkflowExecutionRecord).where(
+            WorkflowExecutionRecord.workflow_execution_id == workflow_id
+        )
+    )
+    if wf_record is None:
+        raise ApiHttpException(
+            status_code=404,
+            code="EXECUTION_NOT_FOUND",
+            message=f"Execution '{workflow_id}' not found.",
+        )
+
+    # Idempotency / Conflict checking per LLD-08 Section 7
+    if wf_record.state in ("CANCELLING", "CANCELLED"):
+        return ExecutionResponseDTO(
+            workflow_execution_id=wf_record.workflow_execution_id,
+            definition_id=wf_record.definition_id,
+            state=wf_record.state,
+            has_output=wf_record.has_output,
+            output=wf_record.workflow_output,
+            created_at_utc=wf_record.created_at_utc,
+            updated_at_utc=wf_record.updated_at_utc,
+        )
+
+    if wf_record.state in ("FAILING", "FAILED", "SUCCEEDED"):
+        raise ApiHttpException(
+            status_code=409,
+            code="INVALID_STATE_TRANSITION",
+            message=f"Cannot cancel workflow in terminal or failing state '{wf_record.state}'.",
+        )
+
+    now_utc = datetime.now(UTC)
+    outcome = await commit_workflow_cancellation_direction(
+        session=session,
+        workflow_id=WorkflowExecutionId(workflow_id),
+        now_utc=now_utc,
+    )
+
+    if outcome.status != CommitStatus.COMMITTED:
+        # Reread to check if raced into terminal/cancelling state
+        await session.rollback()
+        reread = await session.scalar(
+            select(WorkflowExecutionRecord).where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id
+            )
+        )
+        if reread and reread.state in ("CANCELLING", "CANCELLED"):
+            return ExecutionResponseDTO(
+                workflow_execution_id=reread.workflow_execution_id,
+                definition_id=reread.definition_id,
+                state=reread.state,
+                has_output=reread.has_output,
+                output=reread.workflow_output,
+                created_at_utc=reread.created_at_utc,
+                updated_at_utc=reread.updated_at_utc,
+            )
+        raise ApiHttpException(
+            status_code=409,
+            code="CONCURRENT_MODIFICATION",
+            message="Concurrent modification prevented cancellation.",
+        )
+
+    await session.commit()
+    await scheduler.drain_workflow(WorkflowExecutionId(workflow_id))
+
+    # Fetch updated record
+    wf_updated = await session.scalar(
+        select(WorkflowExecutionRecord).where(
+            WorkflowExecutionRecord.workflow_execution_id == workflow_id
+        )
+    )
+    if wf_updated is None:
+        raise ApiHttpException(status_code=500, code="INTERNAL_ERROR", message="Workflow record disappeared.")
+
+    return ExecutionResponseDTO(
+        workflow_execution_id=wf_updated.workflow_execution_id,
+        definition_id=wf_updated.definition_id,
+        state=wf_updated.state,
+        has_output=wf_updated.has_output,
+        output=wf_updated.workflow_output,
+        created_at_utc=wf_updated.created_at_utc,
+        updated_at_utc=wf_updated.updated_at_utc,
+    )

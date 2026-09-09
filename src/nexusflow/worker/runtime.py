@@ -159,6 +159,23 @@ class NexusFlowWorker:
             return False
 
         data = resp.json()
+        if data.get("status") == "CANCEL_COMMAND":
+            canc = data.get("cancellation", {})
+            cb_payload = {
+                "attempt_id": canc.get("attempt_id"),
+                "worker_session_id": str(self._session_id),
+                "payload": {
+                    "outcome_type": "CANCEL_ACK",
+                    "observed_state": "COOPERATIVELY_STOPPED",
+                },
+            }
+            await self._client.post(
+                "/internal/v1/worker/callback",
+                json=cb_payload,
+                headers=headers,
+            )
+            return True
+
         if data.get("status") != "ASSIGNMENT" or not data.get("assignment"):
             return False
 
@@ -206,8 +223,26 @@ class NexusFlowWorker:
                         self._thread_pool, lambda: handler(kwargs)
                     )
         except Exception as exc:
-            # Phase 2 happy path focuses on success; fail fast on user code exceptions
-            raise RuntimeError(f"Activity execution failed: {exc}") from exc
+            # Report failure callback
+            cb_payload = {
+                "attempt_id": str(attempt_id),
+                "worker_session_id": str(self._session_id),
+                "payload": {
+                    "outcome_type": "FAILURE",
+                    "error": {
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                        "details": {},
+                    },
+                },
+            }
+            cb_resp = await self._client.post(
+                "/internal/v1/worker/callback",
+                json=cb_payload,
+                headers=headers,
+            )
+            cb_resp.raise_for_status()
+            return True
 
         # 3. Report Success Callback
         # Validate output against freeze_json

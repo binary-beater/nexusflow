@@ -155,3 +155,14 @@ class WorkerRegistry:
             return await asyncio.wait_for(q.get(), timeout=timeout_seconds)
         except TimeoutError:
             return None
+
+    async def find_lost_sessions(self) -> list[WorkerSessionId]:
+        """Returns session IDs of registered sessions whose heartbeat has exceeded liveness timeout."""
+        now_monotonic = time.monotonic()
+        lost: list[WorkerSessionId] = []
+        async with self._lock:
+            for rec in self._sessions.values():
+                if (now_monotonic - rec.last_heartbeat_monotonic) > self._liveness_timeout_seconds:
+                    lost.append(rec.session_id)
+        return lost
+

@@ -76,6 +76,24 @@ class RuntimeSecurityAuthority:
         return hmac.compare_digest(self.worker_token_digest, supplied_digest)
 
 
+class RetrySettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    fixed_delay_seconds: float = Field(default=5.0, gt=0.0)
+
+
+class RecoverySettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    keyset_batch_size: int = Field(default=100, ge=1, le=1000)
+    convergence_max_passes: int = Field(default=10, ge=1, le=50)
+
+
+class ExecutionTimeoutSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    default_start_deadline_seconds: float = Field(default=30.0, gt=0.0)
+    default_execution_timeout_seconds: float = Field(default=300.0, gt=0.0)
+    cancellation_grace_seconds: float = Field(default=10.0, gt=0.0)
+
+
 class NexusFlowSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="NEXUSFLOW_",
@@ -87,3 +105,6 @@ class NexusFlowSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     http: HttpSettings = Field(default_factory=HttpSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    recovery: RecoverySettings = Field(default_factory=RecoverySettings)
+    timeouts: ExecutionTimeoutSettings = Field(default_factory=ExecutionTimeoutSettings)
