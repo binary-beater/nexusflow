@@ -1,0 +1,37 @@
+workflow_name: order_fulfillment
+
+tasks:
+  verify_inventory:
+    activity_type: inventory.verify
+    dependencies: []
+    input_bindings:
+      order_id:
+        type: workflow_input
+    max_attempts: 3
+
+  charge_customer:
+    activity_type: payment.charge
+    dependencies:
+      - verify_inventory
+    input_bindings:
+      amount:
+        type: literal
+        value: 15000
+      order_id:
+        type: workflow_input
+    max_attempts: 2
+
+  dispatch_goods:
+    activity_type: shipping.dispatch
+    dependencies:
+      - charge_customer
+    input_bindings:
+      payment_receipt:
+        type: task_output
+        task: charge_customer
+    max_attempts: 1
+
+output_bindings:
+  shipment_confirmation:
+    type: task_output
+    task: dispatch_goods

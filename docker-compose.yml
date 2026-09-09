@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexusflow-postgres
+    environment:
+      POSTGRES_DB: nexusflow
+      POSTGRES_USER: nexusflow_user
+      POSTGRES_PASSWORD: nexusflow_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexusflow_user -d nexusflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nexusflow-control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexusflow-control-plane
+    command: ["uvicorn", "nexusflow.interfaces.http.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NEXUSFLOW_DB__URL: postgresql+asyncpg://nexusflow_user:nexusflow_password@postgres:5432/nexusflow
+      NEXUSFLOW_SECURITY__WORKER_DOMAIN_TOKEN: "<WORKER_BEARER_SECRET>"
+      NEXUSFLOW_SECURITY__PUBLIC_API_TOKENS: '[{"principal_id": "client-dev", "token": "<PUBLIC_CLIENT_SECRET>", "permissions": ["definitions:read","definitions:write","executions:read","executions:start","executions:cancel"]}]'
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:
