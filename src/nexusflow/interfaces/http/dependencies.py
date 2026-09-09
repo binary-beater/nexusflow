@@ -7,6 +7,8 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nexusflow.config.settings import NexusFlowSettings
+from nexusflow.orchestration.registry import WorkerRegistry
+from nexusflow.orchestration.scheduler import ExecutionScheduler
 from nexusflow.persistence.engine import create_engine_and_session_factory
 
 # Global engine and session factory instance for the process
@@ -62,3 +64,28 @@ _recovery_gate = SimpleRecoveryGate()
 
 def get_recovery_gate() -> RecoveryGateProtocol:
     return _recovery_gate
+
+
+# Worker Registry & Scheduler Singletons
+_worker_registry: WorkerRegistry | None = None
+_scheduler: ExecutionScheduler | None = None
+
+
+def get_worker_registry() -> WorkerRegistry:
+    global _worker_registry
+    if _worker_registry is None:
+        _worker_registry = WorkerRegistry()
+    return _worker_registry
+
+
+def get_scheduler(
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+    registry: Annotated[WorkerRegistry, Depends(get_worker_registry)],
+) -> ExecutionScheduler:
+    global _scheduler
+    if _scheduler is None:
+        _scheduler = ExecutionScheduler(
+            session_factory=session_factory,
+            worker_registry=registry,
+        )
+    return _scheduler

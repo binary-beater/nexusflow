@@ -66,3 +66,37 @@ def require_permission(required: PublicPermission):
         return ctx
 
     return dependency
+
+
+def require_worker_domain_auth(
+    authorization: Annotated[str | None, Header()] = None,
+    authority: Annotated[RuntimeSecurityAuthority, Depends(get_security_authority)] = None,  # type: ignore
+) -> bool:
+    """Verifies that the request carries a valid worker-domain Bearer token (LLD-05 Section 2.2)."""
+    if not authorization:
+        raise ApiHttpException(
+            status_code=401,
+            code="UNAUTHORIZED",
+            message="Missing Authorization header.",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise ApiHttpException(
+            status_code=401,
+            code="UNAUTHORIZED",
+            message="Invalid Authorization header format. Expected 'Bearer <token>'.",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+
+    token = parts[1]
+    if not authority.authenticate_worker_token(token):
+        raise ApiHttpException(
+            status_code=401,
+            code="UNAUTHORIZED",
+            message="Invalid worker-domain Bearer credential.",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+
+    return True

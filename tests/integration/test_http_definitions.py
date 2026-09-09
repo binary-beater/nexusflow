@@ -44,6 +44,37 @@ async def test_health_endpoints(client_with_postgres_db: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_readyz_fails_when_unready(client_with_postgres_db: AsyncClient):
+    from nexusflow.interfaces.http.dependencies import (
+        SimpleRecoveryGate,
+        get_recovery_gate,
+        get_scheduler,
+    )
+
+    class ClosedRecoveryGate(SimpleRecoveryGate):
+        def allows_new_work(self) -> bool:
+            return False
+
+    # 1. Test RecoveryGate closed
+    app.dependency_overrides[get_recovery_gate] = lambda: ClosedRecoveryGate()
+    res = await client_with_postgres_db.get("/readyz")
+    assert res.status_code == 503
+    assert res.json()["code"] == "NOT_READY"
+
+    # Reset gate
+    app.dependency_overrides.pop(get_recovery_gate)
+
+    # 2. Test Scheduler runtime unavailable
+    app.dependency_overrides[get_scheduler] = lambda: None
+    res = await client_with_postgres_db.get("/readyz")
+    assert res.status_code == 503
+    assert res.json()["code"] == "RUNTIME_UNHEALTHY"
+
+    # Reset scheduler
+    app.dependency_overrides.pop(get_scheduler)
+
+
+@pytest.mark.asyncio
 async def test_definition_registration_unauthorized(client_with_postgres_db: AsyncClient):
     yaml_payload = """
 workflow_name: demo

@@ -1,5 +1,3 @@
-"""Liveness and readiness endpoints (LLD-08 Section 2.3, LLD-09)."""
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
@@ -10,7 +8,9 @@ from nexusflow.interfaces.http.dependencies import (
     RecoveryGateProtocol,
     get_db_session,
     get_recovery_gate,
+    get_scheduler,
 )
+from nexusflow.orchestration.scheduler import ExecutionScheduler
 
 router = APIRouter(tags=["Health"])
 
@@ -26,16 +26,26 @@ async def readyz(
     response: Response,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     gate: Annotated[RecoveryGateProtocol, Depends(get_recovery_gate)],
+    scheduler: Annotated[ExecutionScheduler, Depends(get_scheduler)],
 ) -> dict[str, str]:
-    """Process readiness check: verifies DB connectivity and recovery readiness."""
+    """Process readiness check: verifies DB connectivity, schema compatibility, recovery readiness, and scheduler availability."""
+    # 1. Verify Database connectivity and schema/alembic table presence
     try:
         await session.execute(text("SELECT 1;"))
+        # Verify schema table presence
+        await session.execute(text("SELECT count(*) FROM registered_definitions;"))
     except Exception as exc:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unavailable", "reason": f"Database unreachable: {exc}"}
+        return {"status": "unavailable", "code": "DB_UNAVAILABLE", "reason": f"Database unreachable or unmigrated: {exc}"}
 
+    # 2. Verify RecoveryGate allows work
     if not gate.allows_new_work():
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "recovering", "reason": "Recovery not yet converged"}
+        return {"status": "unavailable", "code": "NOT_READY", "reason": "Recovery not yet converged"}
+
+    # 3. Verify critical Phase-2 runtime / scheduler availability
+    if scheduler is None:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "code": "RUNTIME_UNHEALTHY", "reason": "Scheduler runtime unavailable"}
 
     return {"status": "ready"}

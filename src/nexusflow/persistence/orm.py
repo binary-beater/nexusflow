@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-JSONB_TYPE = JSONB(none_as_null=False)
+JSONB_TYPE = JSONB(none_as_null=True)
 TIMESTAMP_TYPE = TIMESTAMP(timezone=True)
 
 

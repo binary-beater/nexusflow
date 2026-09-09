@@ -1,0 +1,38 @@
+workflow_name: pipeline_three_stage
+
+tasks:
+  stage_a:
+    activity_type: pipeline.stage_a
+    dependencies: []
+    input_bindings:
+      order_id:
+        type: workflow_input
+    max_attempts: 3
+
+  stage_b:
+    activity_type: pipeline.stage_b
+    dependencies:
+      - stage_a
+    input_bindings:
+      upstream_data:
+        type: task_output
+        task: stage_a
+      multiplier:
+        type: literal
+        value: 10
+    max_attempts: 3
+
+  stage_c:
+    activity_type: pipeline.stage_c
+    dependencies:
+      - stage_b
+    input_bindings:
+      final_input:
+        type: task_output
+        task: stage_b
+    max_attempts: 3
+
+output_bindings:
+  pipeline_result:
+    type: task_output
+    task: stage_c

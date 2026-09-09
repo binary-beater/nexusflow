@@ -71,9 +71,14 @@ def create_app() -> FastAPI:
             content=envelope.model_dump(),
         )
 
+    from nexusflow.interfaces.http.routes.executions import router as executions_router
+    from nexusflow.interfaces.http.routes.worker import router as worker_router
+
     # Mount routers
     app.include_router(health_router)
     app.include_router(definitions_router)
+    app.include_router(executions_router)
+    app.include_router(worker_router)
 
     return app
 
