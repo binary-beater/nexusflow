@@ -134,7 +134,37 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
             "/usr/local/bin/docker",
         ]
         docker_exe = next((c for c in docker_candidates if c and os.path.exists(c)), "docker")
-        subprocess.run([docker_exe, "restart", "nexusflow-postgres"], check=True)
+
+        # Dynamically discover target postgres container (by name or image/publish filter)
+        container_target = "nexusflow-postgres"
+        try:
+            ps_name = subprocess.run(
+                [docker_exe, "ps", "-q", "--filter", "name=nexusflow-postgres"],
+                capture_output=True,
+                text=True,
+            )
+            if ps_name.stdout.strip():
+                container_target = ps_name.stdout.strip().splitlines()[0]
+            else:
+                ps_img = subprocess.run(
+                    [docker_exe, "ps", "-q", "--filter", "ancestor=postgres:16-alpine"],
+                    capture_output=True,
+                    text=True,
+                )
+                if ps_img.stdout.strip():
+                    container_target = ps_img.stdout.strip().splitlines()[0]
+                else:
+                    ps_port = subprocess.run(
+                        [docker_exe, "ps", "-q", "--filter", "publish=5432"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if ps_port.stdout.strip():
+                        container_target = ps_port.stdout.strip().splitlines()[0]
+        except Exception:
+            pass
+
+        subprocess.run([docker_exe, "restart", container_target], check=True)
 
         # Wait for pg_isready
         for _ in range(30):
@@ -142,7 +172,7 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
                 [
                     docker_exe,
                     "exec",
-                    "nexusflow-postgres",
+                    container_target,
                     "pg_isready",
                     "-U",
                     "nexusflow_user",
