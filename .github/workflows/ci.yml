@@ -62,8 +62,6 @@ jobs:
       - name: Run Test Suite (Real PostgreSQL)
         env:
           NEXUSFLOW_DB__URL: postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow
-          NEXUSFLOW_SECURITY__WORKER_DOMAIN_TOKEN: <WORKER_BEARER_SECRET>
-          NEXUSFLOW_SECURITY__PUBLIC_API_TOKENS: '[{principal_id: client-dev, token: <PUBLIC_CLIENT_SECRET>, permissions: [definitions:read,definitions:write,executions:read,executions:start,executions:cancel]}]'
         run: |
           uv run pytest -v
 
