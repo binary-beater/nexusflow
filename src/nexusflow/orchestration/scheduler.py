@@ -244,6 +244,18 @@ class ExecutionScheduler:
                 )
 
             if outcome.status == CommitStatus.COMMITTED and ordinal is not None:
+                # Observe scheduling latency: time from RUNNABLE update to CLAIMED commit
+                try:
+                    from nexusflow.observability.metrics import SCHEDULING_LATENCY_SECONDS
+                    if task_row.updated_at_utc:
+                        # Handle naive or aware timestamps cleanly
+                        ref_time = task_row.updated_at_utc.replace(tzinfo=UTC) if task_row.updated_at_utc.tzinfo is None else task_row.updated_at_utc
+                        latency = (now_utc - ref_time).total_seconds()
+                        if latency >= 0:
+                            SCHEDULING_LATENCY_SECONDS.observe(latency)
+                except Exception:
+                    pass
+
                 # Queue delivery hint to worker long-poll
                 assignment_payload = {
                     "attempt_id": str(attempt_id.value),

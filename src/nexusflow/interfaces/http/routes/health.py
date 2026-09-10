@@ -49,3 +49,11 @@ async def readyz(
         return {"status": "unavailable", "code": "RUNTIME_UNHEALTHY", "reason": "Scheduler runtime unavailable"}
 
     return {"status": "ready"}
+
+
+@router.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus exposition endpoint according to LLD-09 Section 10.2."""
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+

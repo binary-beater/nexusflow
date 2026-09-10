@@ -14,11 +14,18 @@ from nexusflow.interfaces.http.dependencies import (
 from nexusflow.interfaces.http.errors import ApiHttpException, ErrorPayload, StandardErrorEnvelope
 from nexusflow.interfaces.http.routes.definitions import router as definitions_router
 from nexusflow.interfaces.http.routes.health import router as health_router
+from nexusflow.observability.logging import setup_logging
+from nexusflow.observability.middleware import MetricsMiddleware
+from nexusflow.observability.tracing import setup_tracing
 from nexusflow.orchestration.recovery import StartupRecoveryEngine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Initialize structured logging and OpenTelemetry tracing
+    setup_logging()
+    setup_tracing("nexusflow-control-plane")
+
     # Run deterministic startup recovery
     session_factory = get_session_factory()
     registry = get_worker_registry()
@@ -45,6 +52,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         lifespan=lifespan,
     )
+
+    app.add_middleware(MetricsMiddleware)
 
     # Standardized error handlers (ADR-018, LLD-08 Section 15)
     @app.exception_handler(ApiHttpException)

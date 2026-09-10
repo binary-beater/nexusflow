@@ -1,0 +1,108 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Workflow Transitions",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "rate(nexusflow_workflow_transition_total[1m])",
+          "legendFormat": "{{to_state}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "title": "Task Transitions",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "rate(nexusflow_task_transition_total[1m])",
+          "legendFormat": "{{to_state}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "title": "Active Worker Sessions",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "nexusflow_active_worker_sessions",
+          "legendFormat": "Active Sessions",
+          "range": true
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 4,
+      "title": "HTTP Request Latency (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(nexusflow_http_request_duration_seconds_bucket[1m])) by (le, route))",
+          "legendFormat": "{{route}} p95",
+          "range": true
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 5,
+      "title": "Scheduling Latency (p50 / p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(nexusflow_scheduling_latency_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p50 Latency",
+          "range": true
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(nexusflow_scheduling_latency_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p95 Latency",
+          "range": true
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["nexusflow"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NexusFlow Control Plane Overview",
+  "uid": "nexusflow-overview",
+  "version": 1
+}
