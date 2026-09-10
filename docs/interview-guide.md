@@ -1,6 +1,6 @@
-﻿# NexusFlow V1 — Systems & Architecture Interview Guide
+# NexusFlow V1 — Systems & Architecture Interview Guide
 
-This guide prepares engineers to discuss and defend the architectural, persistence, and concurrency decisions in **NexusFlow V1**. NexusFlow is a correctness-focused, portfolio-grade distributed workflow orchestration engine with a single control plane and distributed external workers, backed by PostgreSQL 16 as the sole durable authority.
+This guide prepares engineers to discuss and defend the architectural, persistence, and concurrency decisions in **NexusFlow V1**. NexusFlow is a correctness-focused distributed workflow orchestration engine with a single control plane and distributed external workers, backed by PostgreSQL 16 as the sole durable authority.
 
 ---
 
@@ -9,7 +9,7 @@ This guide prepares engineers to discuss and defend the architectural, persisten
 ### Q1: Why is PostgreSQL the sole durable authority? Why not Redis, Kafka, or an event-sourcing log?
 **Answer:**
 1. **Zero Split-Brain Ambiguity:** Relying on an external message broker (Kafka/RabbitMQ) and a database introduces dual-write consistency hazards. In partial failure scenarios, reconciling out-of-sync message offsets with database rows requires complex two-phase commits.
-2. **ACID Transactions as the Coordinator:** By modeling task offers, claims, attempts, and heartbeats directly in PostgreSQL, state transitions and invariant checks occur atomically in a single READ COMMITTED transaction.
+2. **ACID Transactions as the Coordinator:** By modeling task dispatch, claims, attempts, and heartbeats directly in PostgreSQL, state transitions and invariant checks occur atomically in a single READ COMMITTED transaction.
 3. **Auditability Without Eventual Consistency:** History is stored as an immutable audit trail written within the same transaction that commits a state change. The active state is stored as concrete, strongly-typed rows, eliminating the need to replay thousands of events on startup to reconstruct state.
 
 ---
@@ -17,17 +17,30 @@ This guide prepares engineers to discuss and defend the architectural, persisten
 ### Q2: How does NexusFlow prevent race conditions when multiple workers attempt to claim the same task?
 **Answer:**
 NexusFlow enforces a strict two-phase ownership model: **Candidate/Offer is NOT ownership; Attempt creation is the ownership commit.**
-1. During scheduler polling, multiple active workers may receive an offer for a RUNNABLE task.
-2. The first worker to call POST /v1/worker/tasks/{id}/claim initiates commit_task_claim.
-3. Inside PostgreSQL, this executes an UPDATE task_executions SET state = 'CLAIMED', revision = revision + 1 WHERE task_execution_id = :id AND state = 'RUNNABLE' AND revision = :expected_revision.
-4. If two workers race, exactly one worker’s update will affect 1 row. The losing worker receives 0 affected rows, triggering an OCC_CONFLICT outcome.
-5. The winning transaction atomically inserts an execution_attempts record with ttempt_number = 1, durable worker session fencing, and a strict start_deadline_utc. The losing worker safely backs off and polls for other tasks.
+1. During scheduler dispatch, live workers registered in the in-memory WorkerRegistry are matched against RUNNABLE tasks.
+2. The scheduler executes the atomic ownership commit commit_attempt_ownership in PostgreSQL:
+   `sql
+   UPDATE task_executions
+   SET state = 'RUNNING',
+       revision = revision + 1,
+       next_attempt_ordinal = next_attempt_ordinal + 1,
+       updated_at_utc = :now_utc
+   WHERE task_execution_id = :task_id
+     AND workflow_execution_id = :workflow_id
+     AND state = 'RUNNABLE'
+     AND revision = :expected_task_revision
+   RETURNING next_attempt_ordinal - 1;
+   `
+3. In the exact same database transaction, a new execution_attempts record is inserted in CLAIMED state with the allocated ordinal, worker session ID, and start_deadline_utc.
+4. If multiple dispatchers or concurrent reconciliation cycles race for the same task, strict OCC on 	ask_executions.revision ensures exactly one commit succeeds; the losing transaction receives 0 affected rows (OCC_CONFLICT) and safely backs off.
+5. The worker receives the assignment via long-poll (POST /internal/v1/worker/poll) and acknowledges start via POST /internal/v1/worker/start, which conditionally transitions the attempt from CLAIMED to RUNNING before executing activity code.
 
 ---
 
 ### Q3: When do you use Optimistic Concurrency Control (OCC) vs. Pessimistic Row Locking (SELECT ... FOR UPDATE)?
 **Answer:**
-- **OCC (evision = :expected_revision):** Used for normal execution lifecycle operations—task polling, claim commits, start commits, heartbeat renewals, and successful completions. Because task instances are owned by a single worker session, write contention during normal execution is minimal.
+- **OCC (
+evision = :expected_revision):** Used for normal execution lifecycle operations—task polling, claim commits, start commits, heartbeat renewals, and successful completions. Because task instances are owned by a single worker session, write contention during normal execution is minimal.
 - **Narrow Row Locks (SELECT ... FOR UPDATE):** Strictly limited to **workflow direction boundaries**:
   - RUNNING -> FAILING (when an attempt failure causes retry budget exhaustion).
   - INITIALIZING/RUNNING -> CANCELLING (when a user or system issues a cancel command).
@@ -55,11 +68,12 @@ NexusFlow stores state authoritatively in normal relational tables (workflow_exe
 
 ### Q6: How does NexusFlow guarantee idempotency in worker callbacks?
 **Answer:**
-Every worker callback (claim, start, heartbeat, succeed, ail, cancel_ack) includes:
+Every worker callback (/start, /callback) includes:
 1. 	ask_execution_id
 2. ttempt_id
 3. worker_session_id
-4. Expected evision
+4. Expected 
+evision
 
 If a network timeout causes a worker to retry an HTTP callback that already succeeded:
 - The transaction checks if the attempt is already in the target state with identical output payload. If so, it returns 200 OK (idempotent duplicate acceptance) without modifying state or incrementing revisions.

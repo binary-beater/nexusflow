@@ -4,7 +4,7 @@
 
 ## 1. Document Purpose
 
-This document provides the canonical High-Level Design (HLD) for NexusFlow V1. It synthesizes the complete set of approved architectural decisions ([ADR-001 through ADR-023](file:///docs/architecture/00-architecture-decision-register.md)) into a unified, implementation-oriented system design. 
+This document provides the canonical High-Level Design (HLD) for NexusFlow V1. It synthesizes the complete set of approved architectural decisions ([ADR-001 through ADR-023](docs/architecture/00-architecture-decision-register.md)) into a unified, implementation-oriented system design. 
 
 The primary objective of this HLD is to answer:
 > **How do all approved NexusFlow V1 architectural decisions operate together as a single, coherent distributed orchestration system?**
@@ -24,10 +24,10 @@ This document serves as the authoritative blueprint bridging high-level architec
 - **Reference Deployment**: Containerized multi-service topology managed via Docker Compose.
 
 ### Out-of-Scope (Deferred to V2+)
-- Multi-node control plane high availability, clustering, and leader election ([ADR-025](file:///docs/architecture/adr-025-high-availability-and-clustering.md)).
-- Dynamic workflow definition version migration ([ADR-024](file:///docs/architecture/adr-024-workflow-versioning-strategy.md)).
-- Multi-language worker SDKs ([ADR-026](file:///docs/architecture/adr-026-multi-language-sdk-architecture.md)).
-- Graphical operations dashboard UI ([ADR-027](file:///docs/architecture/adr-027-dashboard-architecture.md)).
+- Multi-node control plane high availability, clustering, and leader election ([ADR-025](docs/architecture/adr-025-high-availability-and-clustering.md)).
+- Dynamic workflow definition version migration ([ADR-024](docs/architecture/adr-024-workflow-versioning-strategy.md)).
+- Multi-language worker SDKs ([ADR-026](docs/architecture/adr-026-multi-language-sdk-architecture.md)).
+- Graphical operations dashboard UI ([ADR-027](docs/architecture/adr-027-dashboard-architecture.md)).
 - Multi-tenancy, dynamic quotas, Redis/message broker integration, and arbitrary activity container sandboxing.
 
 ---
@@ -37,17 +37,17 @@ This document serves as the authoritative blueprint bridging high-level architec
 The design of NexusFlow V1 is governed by twelve foundational engineering principles:
 
 1. **Correctness Over Performance**: State corruption, duplicate progression, lost completions, or orphaned entities are completely unacceptable. Latency is secondary to consistency.
-2. **Configuration Tunes Mechanisms; It Does Not Redefine Architecture**: Configuration parameterizes operational thresholds (timeouts, pool sizes, batch limits); it cannot alter state machines, dependency rules, or persistence atomicity ([ADR-023](file:///docs/architecture/adr-023-configuration-architecture.md)).
+2. **Configuration Tunes Mechanisms; It Does Not Redefine Architecture**: Configuration parameterizes operational thresholds (timeouts, pool sizes, batch limits); it cannot alter state machines, dependency rules, or persistence atomicity ([ADR-023](docs/architecture/adr-023-configuration-architecture.md)).
 3. **Explicit Behavior Over Implicit Magic**: Transitions, timeouts, retries, and worker coordination follow explicit state-machine events and OCC revisions. No hidden background state synthesis.
-4. **Recovery as a First-Class Citizen**: System crashes are expected operational events. Control-plane startup reconciliation restores orchestration truth strictly from durable database snapshots without replaying history or reparsing YAML ([ADR-012](file:///docs/architecture/adr-012-recovery.md)).
-5. **Separation of Authentication from Orchestration Authority**: Identity verification (`Bearer` token) proves membership in a security domain; execution authority (`WorkerSessionId`, `AttemptId`, OCC revision) proves rights to mutate a specific attempt ([ADR-022](file:///docs/architecture/adr-022-security-architecture.md)).
-6. **Two-Phase Coordination (Candidate $\to$ Ownership)**: Offering work to a worker creates no attempt and consumes no retries. Authoritative ownership commits atomically in PostgreSQL before execution dispatch ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)).
-7. **Transactional Atomicity Across Consistency Groups**: State transitions, authoritative outputs, and audit history entries commit all-or-nothing in single SQL transactions ([ADR-011](file:///docs/architecture/adr-011-state-persistence.md), [ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)).
-8. **No Remote Network I/O Inside State Transactions**: Database transactions never block on worker HTTP requests, telemetry exports, or external services ([ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)).
-9. **Current State is Authoritative; History is Audit**: Orchestration decisions inspect current relational state records. History is an append-only, immutable audit trail, not an event-sourced reconstruction mechanism ([ADR-014](file:///docs/architecture/adr-014-execution-history-and-audit-model.md)).
-10. **Telemetry is Non-Authoritative and Fail-Open**: Telemetry exporter drops or collector outages never block or fail orchestration transactions ([ADR-016](file:///docs/architecture/adr-016-observability.md)).
-11. **Trusted Worker Activity Execution**: In V1, worker activity code runs in a worker-local thread pool under an organizational trusted-code assumption; no process or container sandboxing is promised ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md), [ADR-022](file:///docs/architecture/adr-022-security-architecture.md)).
-12. **Single Control-Plane Invariant ($N=1$)**: V1 enforces exactly one authoritative control-plane process to guarantee the integrity of the in-process Worker Registry and scheduler loops ([ADR-019](file:///docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-023](file:///docs/architecture/adr-023-configuration-architecture.md)).
+4. **Recovery as a First-Class Citizen**: System crashes are expected operational events. Control-plane startup reconciliation restores orchestration truth strictly from durable database snapshots without replaying history or reparsing YAML ([ADR-012](docs/architecture/adr-012-recovery.md)).
+5. **Separation of Authentication from Orchestration Authority**: Identity verification (`Bearer` token) proves membership in a security domain; execution authority (`WorkerSessionId`, `AttemptId`, OCC revision) proves rights to mutate a specific attempt ([ADR-022](docs/architecture/adr-022-security-architecture.md)).
+6. **Two-Phase Coordination (Candidate $\to$ Ownership)**: Offering work to a worker creates no attempt and consumes no retries. Authoritative ownership commits atomically in PostgreSQL before execution dispatch ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)).
+7. **Transactional Atomicity Across Consistency Groups**: State transitions, authoritative outputs, and audit history entries commit all-or-nothing in single SQL transactions ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)).
+8. **No Remote Network I/O Inside State Transactions**: Database transactions never block on worker HTTP requests, telemetry exports, or external services ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)).
+9. **Current State is Authoritative; History is Audit**: Orchestration decisions inspect current relational state records. History is an append-only, immutable audit trail, not an event-sourced reconstruction mechanism ([ADR-014](docs/architecture/adr-014-execution-history-and-audit-model.md)).
+10. **Telemetry is Non-Authoritative and Fail-Open**: Telemetry exporter drops or collector outages never block or fail orchestration transactions ([ADR-016](docs/architecture/adr-016-observability.md)).
+11. **Trusted Worker Activity Execution**: In V1, worker activity code runs in a worker-local thread pool under an organizational trusted-code assumption; no process or container sandboxing is promised ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md), [ADR-022](docs/architecture/adr-022-security-architecture.md)).
+12. **Single Control-Plane Invariant ($N=1$)**: V1 enforces exactly one authoritative control-plane process to guarantee the integrity of the in-process Worker Registry and scheduler loops ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-023](docs/architecture/adr-023-configuration-architecture.md)).
 
 ---
 
@@ -134,7 +134,7 @@ graph TD
 
 ## 6. Logical Architecture
 
-The control plane is organized as a **Modular Monolith** ([ADR-019](file:///docs/architecture/adr-019-project-and-service-boundaries.md)) following clean architectural layering:
+The control plane is organized as a **Modular Monolith** ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md)) following clean architectural layering:
 
 ```
 +─────────────────────────────────────────────────────────────────────────────────────+
@@ -201,7 +201,7 @@ The control plane is organized as a **Modular Monolith** ([ADR-019](file:///docs
 
 ## 8. Dependency Direction
 
-NexusFlow strictly enforces **inward dependency direction** per [ADR-019](file:///docs/architecture/adr-019-project-and-service-boundaries.md):
+NexusFlow strictly enforces **inward dependency direction** per [ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md):
 
 ```
 Interfaces / Frameworks (FastAPI, Uvicorn)
@@ -344,7 +344,7 @@ sequenceDiagram
 
 ## 11. Execution Lifecycle State Machines
 
-### 11.1 WorkflowExecution State Machine ([ADR-006](file:///docs/architecture/adr-006-workflow-execution-state-machine.md))
+### 11.1 WorkflowExecution State Machine ([ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md))
 
 ```mermaid
 stateDiagram-v2
@@ -367,7 +367,7 @@ stateDiagram-v2
 
 *(Note: Cancellation of an `INITIALIZING` workflow transitions `INITIALIZING $\to$ CANCELLING $\to$ CANCELLED`; direct transition to `CANCELLED` is forbidden).*
 
-### 11.2 TaskExecution Lifecycle ([ADR-007](file:///docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
+### 11.2 TaskExecution Lifecycle ([ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
 
 ```mermaid
 stateDiagram-v2
@@ -393,7 +393,7 @@ stateDiagram-v2
 
 *(Note: States `BLOCKED` and `DISPATCHED` are strictly rejected).*
 
-### 11.3 ExecutionAttempt Lifecycle ([ADR-007](file:///docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
+### 11.3 ExecutionAttempt Lifecycle ([ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
 
 ```mermaid
 stateDiagram-v2
@@ -436,7 +436,7 @@ The scheduling engine coordinates task readiness based on canonical graph topolo
 
 ## 13. Worker Coordination Architecture
 
-Worker coordination is governed by an **ephemeral in-process registry** combined with durable database attempt records ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)):
+Worker coordination is governed by an **ephemeral in-process registry** combined with durable database attempt records ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)):
 
 ```mermaid
 sequenceDiagram
@@ -467,7 +467,7 @@ sequenceDiagram
 
 ## 14. Routing Architecture
 
-Routing evaluates candidate compatibility per [ADR-009](file:///docs/architecture/adr-009-task-routing.md):
+Routing evaluates candidate compatibility per [ADR-009](docs/architecture/adr-009-task-routing.md):
 - **Candidate Evaluation**: When a worker issues a poll request, the Worker Poll use case queries the Routing/Scheduling coordinator. The coordinator inspects durable `RUNNABLE` tasks against active worker sessions.
 - **Eligibility Criteria**:
   1. Worker session is registered and currently **live** ($T_{\text{last\_heartbeat}} + L > \text{now}$).
@@ -483,7 +483,7 @@ Routing evaluates candidate compatibility per [ADR-009](file:///docs/architectur
 The transition from an ephemeral candidate offer to authoritative ownership is the central concurrency boundary in NexusFlow.
 
 > [!IMPORTANT]
-> In accordance with [ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md), ownership commit uses **Durable Optimistic Single-Winner Concurrency (OCC)**. The transaction uses conditional semantic predicates and OCC revision checks. No global or table-wide pessimistic locks are required for correctness.
+> In accordance with [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md), ownership commit uses **Durable Optimistic Single-Winner Concurrency (OCC)**. The transaction uses conditional semantic predicates and OCC revision checks. No global or table-wide pessimistic locks are required for correctness.
 
 ```mermaid
 sequenceDiagram
@@ -580,7 +580,7 @@ sequenceDiagram
 
 ## 18. Task Failure & Retry Architecture
 
-When an attempt fails, NexusFlow strictly separates **Task Failure Settlement** from **Workflow Failure Direction Arbitration** ([ADR-011](file:///docs/architecture/adr-011-state-persistence.md), [ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)):
+When an attempt fails, NexusFlow strictly separates **Task Failure Settlement** from **Workflow Failure Direction Arbitration** ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
 
 ```mermaid
 flowchart TD
@@ -610,7 +610,7 @@ If a definitive task failure races against a user cancellation request, **the fi
 
 ## 19. Worker Loss Architecture
 
-Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)):
+Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)):
 1. **Detection**: Background liveness loop detects that a registered session has missed heartbeats beyond `liveness_timeout_seconds` ($T_{\text{last\_heartbeat}} + L < \text{now}$).
 2. **Session Eviction**: The session is marked evicted in the in-process registry; capability advertisements are withdrawn.
 3. **Attempt Settlement**:
@@ -623,7 +623,7 @@ Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](fil
 
 ## 20. Workflow Cancellation Flow
 
-Cancellation requests transition workflow direction and settle task executions ([ADR-006](file:///docs/architecture/adr-006-workflow-execution-state-machine.md)):
+Cancellation requests transition workflow direction and settle task executions ([ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md)):
 
 ```mermaid
 sequenceDiagram
@@ -685,7 +685,7 @@ A workflow transitions from `RUNNING` to `SUCCEEDED` if and only if:
 
 ## 23. Data Flow Architecture
 
-Data flow is strictly declarative and deterministic ([ADR-010](file:///docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)):
+Data flow is strictly declarative and deterministic ([ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)):
 - **Named Input Map**: A task execution's logical input is structured as a named input map.
 - **Whole-Value Bindings**: Each named input binding resolves exactly one of:
   - `Literal`: Injects an immutable JSON-compatible value.
@@ -699,7 +699,7 @@ Data flow is strictly declarative and deterministic ([ADR-010](file:///docs/arch
 
 ## 24. Persistence Model & Consistency Groups
 
-Database mutations are partitioned into explicit, multi-entity transactional consistency groups ([ADR-011](file:///docs/architecture/adr-011-state-persistence.md), [ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)):
+Database mutations are partitioned into explicit, multi-entity transactional consistency groups ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
 
 | Consistency Group | Mutated Entities | Preconditions | History Event Category |
 | :--- | :--- | :--- | :--- |
@@ -720,7 +720,7 @@ Database mutations are partitioned into explicit, multi-entity transactional con
 
 ## 25. Concurrency & OCC Model
 
-NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on top of PostgreSQL `READ COMMITTED` transactions ([ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)):
+NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on top of PostgreSQL `READ COMMITTED` transactions ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
 - Every mutable entity table (`workflow_executions`, `task_executions`, `execution_attempts`) includes an integer `revision` column.
 - Updates assert revision matching and semantic predicates:
   - If rows updated equals `0`, an OCC conflict occurred. The transaction aborts and rolls back.
@@ -732,7 +732,7 @@ NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on 
 
 ## 26. History & Audit Architecture
 
-- **Authoritative vs. Audit**: Current state tables are the sole source of truth for orchestration logic. The `history_entries` table is an append-only audit trail ([ADR-014](file:///docs/architecture/adr-014-execution-history-and-audit-model.md)).
+- **Authoritative vs. Audit**: Current state tables are the sole source of truth for orchestration logic. The `history_entries` table is an append-only audit trail ([ADR-014](docs/architecture/adr-014-execution-history-and-audit-model.md)).
 - **Atomicity**: A history entry is written in the exact same SQL transaction as the state mutation it records.
 - **No Event Sourcing**: History entries are never replayed to reconstruct state during crash recovery.
 - **Illustrative Semantic Categories**: Event names (`TaskMarkedRunnable`, `TaskClaimedByWorker`, `TaskExecutionSucceeded`, etc.) represent illustrative semantic categories; exact event naming schemas and payloads belong to History LLD.
@@ -742,20 +742,20 @@ NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on 
 
 ## 27. Public API Architecture
 
-The public API is a RESTful HTTP/JSON interface implemented with FastAPI ([ADR-015](file:///docs/architecture/adr-015-external-api-architecture.md)):
+The public API is a RESTful HTTP/JSON interface implemented with FastAPI ([ADR-015](docs/architecture/adr-015-external-api-architecture.md)):
 - **Resource Families**:
   - `/definitions`: Workflow registration and inspection.
   - `/executions`: Workflow start, inspection, cancellation, and task listing.
   - `/executions/{id}/history`: Cursor-paginated execution history.
 - **Idempotent Starts**: Workflow start endpoints accept an optional `Idempotency-Key` header. Requests presenting an identical key and matching payload return the original execution resource; conflicting payloads return `HTTP 409 Conflict`.
 - **Start Execution Acknowledgement**: The API acknowledges execution creation as soon as the workflow is durably created. The returned authoritative state may be `INITIALIZING` or `RUNNING`; clients do not block waiting for task scheduling or worker assignment.
-- **Standard Error Envelopes**: All error responses adhere to normalized error structures ([ADR-018](file:///docs/architecture/adr-018-error-handling-philosophy.md)), preventing stack traces, raw SQL queries, or database connection strings from leaking to clients.
+- **Standard Error Envelopes**: All error responses adhere to normalized error structures ([ADR-018](docs/architecture/adr-018-error-handling-philosophy.md)), preventing stack traces, raw SQL queries, or database connection strings from leaking to clients.
 
 ---
 
 ## 28. Security Architecture
 
-NexusFlow V1 implements a defense-in-depth security model ([ADR-022](file:///docs/architecture/adr-022-security-architecture.md)):
+NexusFlow V1 implements a defense-in-depth security model ([ADR-022](docs/architecture/adr-022-security-architecture.md)):
 
 ```mermaid
 graph LR
@@ -792,7 +792,7 @@ graph LR
 
 ## 29. Observability Architecture
 
-Observability is decoupled from orchestration correctness ([ADR-016](file:///docs/architecture/adr-016-observability.md)):
+Observability is decoupled from orchestration correctness ([ADR-016](docs/architecture/adr-016-observability.md)):
 - **Structured Logging**: Emits machine-readable JSON logs to `stdout` containing correlation identifiers (`workflow_execution_id`, `task_execution_id`, `attempt_id`).
 - **Prometheus Metrics**: Exposes operational counters and histograms at `/metrics`. Metric labels are restricted to bounded, low-cardinality keys (e.g., `status`, or `activity_type` if bounded and cardinality-safe). Dynamic IDs and unbounded names are strictly forbidden as labels.
 - **OpenTelemetry Tracing**: Exporters operate asynchronously; exporter failures fail open without impacting transaction commits. Distributed trace context propagation across worker boundaries via W3C TraceContext is recommended as an implementation-level standard.
@@ -801,7 +801,7 @@ Observability is decoupled from orchestration correctness ([ADR-016](file:///doc
 
 ## 30. Configuration Architecture
 
-Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](file:///docs/architecture/adr-023-configuration-architecture.md)):
+Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](docs/architecture/adr-023-configuration-architecture.md)):
 - **Source Hierarchy**: Explicit Test Injection > Environment Variables (`NEXUSFLOW_*`) > Mounted Secret Files > Local `.env` > Code Defaults.
 - **Process Lifetime Immutability**: Settings are loaded, validated, and frozen at boot. Runtime hot-reloading is deferred.
 - **Fail-Closed Validation**: Missing required credentials, malformed URLs, or invalid cross-field bounds halt startup immediately.
@@ -811,7 +811,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](file:/
 
 ## 31. Startup & Shutdown Lifecycles
 
-### 31.1 Startup Lifecycle ([ADR-020](file:///docs/architecture/adr-020-technology-selection.md), [ADR-023](file:///docs/architecture/adr-023-configuration-architecture.md))
+### 31.1 Startup Lifecycle ([ADR-020](docs/architecture/adr-020-technology-selection.md), [ADR-023](docs/architecture/adr-023-configuration-architecture.md))
 
 ```
 1. Load & Validate Configuration (Pydantic v2)
@@ -824,7 +824,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](file:/
 8. Transition Health Endpoint to READY
 ```
 
-### 31.2 Graceful Shutdown Lifecycle ([ADR-017](file:///docs/architecture/adr-017-graceful-shutdown-architecture.md))
+### 31.2 Graceful Shutdown Lifecycle ([ADR-017](docs/architecture/adr-017-graceful-shutdown-architecture.md))
 
 ```
 1. Receive Termination Signal (e.g., SIGTERM / SIGINT)
@@ -841,7 +841,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](file:/
 
 ## 32. Recovery & Reconciliation Architecture
 
-Crash recovery relies exclusively on **current database state snapshots** ([ADR-012](file:///docs/architecture/adr-012-recovery.md)):
+Crash recovery relies exclusively on **current database state snapshots** ([ADR-012](docs/architecture/adr-012-recovery.md)):
 - **No History Replay**: Recovery never replays history entries or reparses YAML files.
 - **No Synthetic States**: The engine never transitions entities to artificial states like `RECOVERING`.
 - **Snapshot Scenarios**:
@@ -856,7 +856,7 @@ Crash recovery relies exclusively on **current database state snapshots** ([ADR-
 
 ## 33. Failure Handling Taxonomy
 
-Failure modes are classified into distinct architectural categories ([ADR-018](file:///docs/architecture/adr-018-error-handling-philosophy.md)):
+Failure modes are classified into distinct architectural categories ([ADR-018](docs/architecture/adr-018-error-handling-philosophy.md)):
 
 ```
                                 SYSTEM FAILURE TAXONOMY

@@ -8,7 +8,7 @@ This Architecture Decision Record (ADR) establishes the security architecture, t
 
 ## 2. Context
 
-NexusFlow V1 operates as a modular monolith control plane (FastAPI, Uvicorn, Python 3.12, SQLAlchemy 2.0 Async, `asyncpg`, PostgreSQL 16) coordinating with external distributed Python V1 workers over an HTTP/JSON pull/long-poll protocol ([ADR-019](file:///docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-020](file:///docs/architecture/adr-020-technology-selection.md)). Orchestration state truth is maintained under `READ COMMITTED` isolation with integer-revision Optimistic Concurrency Control (OCC) ([ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)). Worker coordination follows a two-phase Candidate $\to$ Ownership handshake ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)), execution history provides immutable audit trails ([ADR-014](file:///docs/architecture/adr-014-execution-history-and-audit-model.md)), public operations expose REST contracts ([ADR-015](file:///docs/architecture/adr-015-external-api-architecture.md)), and layered invariant testing verifies engine correctness ([ADR-021](file:///docs/architecture/adr-021-testing-strategy.md)).
+NexusFlow V1 operates as a modular monolith control plane (FastAPI, Uvicorn, Python 3.12, SQLAlchemy 2.0 Async, `asyncpg`, PostgreSQL 16) coordinating with external distributed Python V1 workers over an HTTP/JSON pull/long-poll protocol ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-020](docs/architecture/adr-020-technology-selection.md)). Orchestration state truth is maintained under `READ COMMITTED` isolation with integer-revision Optimistic Concurrency Control (OCC) ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)). Worker coordination follows a two-phase Candidate $\to$ Ownership handshake ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)), execution history provides immutable audit trails ([ADR-014](docs/architecture/adr-014-execution-history-and-audit-model.md)), public operations expose REST contracts ([ADR-015](docs/architecture/adr-015-external-api-architecture.md)), and layered invariant testing verifies engine correctness ([ADR-021](docs/architecture/adr-021-testing-strategy.md)).
 
 Distributed asynchronous orchestration systems present distinct security challenges:
 - External callers must be authenticated before submitting workflows, inspecting state, or issuing cancellations.
@@ -68,7 +68,7 @@ while preserving all previously approved lifecycle state machines, transactional
 - Enforce least-privilege database connectivity and network isolation.
 - Specify safe parsing modes and bounded ingestion guards for YAML definitions and JSON payloads.
 - Define structured secret redaction across diagnostic logs, distributed traces, and Prometheus metrics.
-- Maintain full traceability to governing ADRs and test requirements in [ADR-021](file:///docs/architecture/adr-021-testing-strategy.md).
+- Maintain full traceability to governing ADRs and test requirements in [ADR-021](docs/architecture/adr-021-testing-strategy.md).
 
 ---
 
@@ -222,7 +222,7 @@ Security failures must produce clear diagnostic telemetry without leaking sensit
 
 ## 16. Testing
 
-Per [ADR-021](file:///docs/architecture/adr-021-testing-strategy.md), security verification is incorporated directly into the test suite:
+Per [ADR-021](docs/architecture/adr-021-testing-strategy.md), security verification is incorporated directly into the test suite:
 
 ```
 tests/
@@ -329,17 +329,17 @@ In systems engineering interviews, NexusFlow's security architecture demonstrate
 
 ## 25. References
 
-- [ADR-008: Worker Coordination & Liveness Model](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)
-- [ADR-010: Workflow Data Flow & Parameter Passing](file:///docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
-- [ADR-011: State Persistence Strategy](file:///docs/architecture/adr-011-state-persistence.md)
-- [ADR-013: Consistency & Concurrency Strategy](file:///docs/architecture/adr-013-consistency-and-concurrency.md)
-- [ADR-014: Execution History & Audit Model](file:///docs/architecture/adr-014-execution-history-and-audit-model.md)
-- [ADR-015: External API Architecture](file:///docs/architecture/adr-015-external-api-architecture.md)
-- [ADR-016: Observability Architecture](file:///docs/architecture/adr-016-observability.md)
-- [ADR-018: Error Handling Philosophy](file:///docs/architecture/adr-018-error-handling-philosophy.md)
-- [ADR-019: Project Modularity & Service Boundaries](file:///docs/architecture/adr-019-project-and-service-boundaries.md)
-- [ADR-020: Technology Selection Strategy](file:///docs/architecture/adr-020-technology-selection.md)
-- [ADR-021: Testing Strategy](file:///docs/architecture/adr-021-testing-strategy.md)
+- [ADR-008: Worker Coordination & Liveness Model](docs/architecture/adr-008-worker-coordination-and-liveness.md)
+- [ADR-010: Workflow Data Flow & Parameter Passing](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
+- [ADR-011: State Persistence Strategy](docs/architecture/adr-011-state-persistence.md)
+- [ADR-013: Consistency & Concurrency Strategy](docs/architecture/adr-013-consistency-and-concurrency.md)
+- [ADR-014: Execution History & Audit Model](docs/architecture/adr-014-execution-history-and-audit-model.md)
+- [ADR-015: External API Architecture](docs/architecture/adr-015-external-api-architecture.md)
+- [ADR-016: Observability Architecture](docs/architecture/adr-016-observability.md)
+- [ADR-018: Error Handling Philosophy](docs/architecture/adr-018-error-handling-philosophy.md)
+- [ADR-019: Project Modularity & Service Boundaries](docs/architecture/adr-019-project-and-service-boundaries.md)
+- [ADR-020: Technology Selection Strategy](docs/architecture/adr-020-technology-selection.md)
+- [ADR-021: Testing Strategy](docs/architecture/adr-021-testing-strategy.md)
 - NIST SP 800-63B: Digital Identity Guidelines
 - OWASP API Security Top 10
 

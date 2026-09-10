@@ -4,22 +4,22 @@
 
 This Architectural Decision Record (ADR) defines the system recovery strategy, post-crash reconciliation procedure, and operational continuity model for the NexusFlow orchestration engine. It establishes how the control plane reconstructs safe, deterministic orchestration behavior following an orchestrator process crash, host termination, transient persistence outage, loss of volatile message queues, or loss of in-memory worker registries.
 
-Furthermore, this record formalizes how the orchestrator reconciles in-flight worker executions, re-establishes ephemeral scheduling heaps, handles cold-start worker re-registration grace, and repairs valid interrupted lifecycle transitions. It preserves the integrity of state machines established in [ADR-006](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-006-workflow-execution-state-machine.md) and [ADR-007](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md), enforces the durable current-state model from [ADR-011](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-011-state-persistence-strategy.md), and maintains clean boundaries with physical concurrency control ([ADR-013](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/00-architecture-decision-register.md#adr-013---consistency--concurrency-strategy)) and error classification ([ADR-018](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/00-architecture-decision-register.md#adr-018---error-handling-philosophy)).
+Furthermore, this record formalizes how the orchestrator reconciles in-flight worker executions, re-establishes ephemeral scheduling heaps, handles cold-start worker re-registration grace, and repairs valid interrupted lifecycle transitions. It preserves the integrity of state machines established in [ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md) and [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md), enforces the durable current-state model from [ADR-011](docs/architecture/adr-011-state-persistence-strategy.md), and maintains clean boundaries with physical concurrency control ([ADR-013](docs/architecture/00-architecture-decision-register.md#adr-013---consistency--concurrency-strategy)) and error classification ([ADR-018](docs/architecture/00-architecture-decision-register.md#adr-018---error-handling-philosophy)).
 
 ---
 
 ## 2. Context
 
 NexusFlow orchestrates long-running, multi-step directed acyclic graph (DAG) workflows across distributed, loosely coupled workers. The architectural foundation is established across eleven preceding decisions:
-- [ADR-001](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-001-internal-workflow-specification.md) & [ADR-002](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-002-workflow-definition-parsing-strategy.md) established the canonical Internal Workflow Specification (Validated IWS) and dictated that execution and recovery must never re-parse external YAML authoring files.
-- [ADR-003](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-003-canonical-workflow-graph-representation.md) established that the canonical task graph is a pure, deterministic projection derived directly from the Validated IWS.
-- [ADR-005](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md) defined success-only dependency satisfaction and task eligibility.
-- [ADR-006](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-006-workflow-execution-state-machine.md) established the root `WorkflowExecution` lifecycle (`INITIALIZING`, `RUNNING`, `FAILING`, `CANCELLING`, `SUCCEEDED`, `FAILED`, `CANCELLED`).
-- [ADR-007](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled logical `TaskExecution` states from ephemeral `ExecutionAttempt` records and established retry isolation.
-- [ADR-008](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-008-worker-coordination-and-liveness-model.md) established worker incarnation tracking via `WorkerSessionId`, durable attempt ownership, execution-start deadlines, cancellation-resolution deadlines, and single-winner result fencing.
-- [ADR-009](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-009-task-routing-strategy.md) decoupled routing and candidate matching from authoritative attempt creation.
-- [ADR-010](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md) established the JSON-compatible value model, materialized task inputs, authoritative output immutability, and atomic visibility of success states with outputs.
-- [ADR-011](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-011-state-persistence-strategy.md) established the **Durable Current-State Persistence Model** as the authoritative source of orchestration truth, defined ten logical consistency groups, and classified ephemeral vs. reconstructible state.
+- [ADR-001](docs/architecture/adr-001-internal-workflow-specification.md) & [ADR-002](docs/architecture/adr-002-workflow-definition-parsing-strategy.md) established the canonical Internal Workflow Specification (Validated IWS) and dictated that execution and recovery must never re-parse external YAML authoring files.
+- [ADR-003](docs/architecture/adr-003-canonical-workflow-graph-representation.md) established that the canonical task graph is a pure, deterministic projection derived directly from the Validated IWS.
+- [ADR-005](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md) defined success-only dependency satisfaction and task eligibility.
+- [ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md) established the root `WorkflowExecution` lifecycle (`INITIALIZING`, `RUNNING`, `FAILING`, `CANCELLING`, `SUCCEEDED`, `FAILED`, `CANCELLED`).
+- [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled logical `TaskExecution` states from ephemeral `ExecutionAttempt` records and established retry isolation.
+- [ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness-model.md) established worker incarnation tracking via `WorkerSessionId`, durable attempt ownership, execution-start deadlines, cancellation-resolution deadlines, and single-winner result fencing.
+- [ADR-009](docs/architecture/adr-009-task-routing-strategy.md) decoupled routing and candidate matching from authoritative attempt creation.
+- [ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md) established the JSON-compatible value model, materialized task inputs, authoritative output immutability, and atomic visibility of success states with outputs.
+- [ADR-011](docs/architecture/adr-011-state-persistence-strategy.md) established the **Durable Current-State Persistence Model** as the authoritative source of orchestration truth, defined ten logical consistency groups, and classified ephemeral vs. reconstructible state.
 
 While ADR-011 establishes **what state is durable**, an orchestration engine inevitably encounters process crashes, host reboots, unannounced worker disconnections, and storage timeouts. The system requires an explicit **Recovery Strategy** to govern how a restarted orchestrator transitions from cold storage to active scheduling without losing progress, duplicating execution, or corrupting state.
 
@@ -558,18 +558,18 @@ The recovery architecture requires exhaustive verification across crash-injectio
 
 ## 25. References
 
-- [ADR-001: Internal Workflow Specification](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-001-internal-workflow-specification.md)
-- [ADR-002: Workflow Definition Parsing & Normalization](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-002-workflow-definition-parsing-strategy.md)
-- [ADR-003: Canonical Workflow Graph Representation](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-003-canonical-workflow-graph-representation.md)
-- [ADR-004: Workflow Validation Strategy](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-004-workflow-validation-strategy.md)
-- [ADR-005: Workflow Task Scheduling & Dispatch](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
-- [ADR-006: Workflow Execution State Machine](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-006-workflow-execution-state-machine.md)
-- [ADR-007: Task Execution Lifecycle & Attempt Model](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md)
-- [ADR-008: Worker Coordination & Liveness Model](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-008-worker-coordination-and-liveness-model.md)
-- [ADR-009: Task Routing Strategy](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-009-task-routing-strategy.md)
-- [ADR-010: Workflow Data Flow & Parameter Passing](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
-- [ADR-011: State Persistence Strategy](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/adr-011-state-persistence-strategy.md)
-- [Architecture Decision Register](file:///c:/Users/KIIT/Desktop/nexusflow/docs/architecture/00-architecture-decision-register.md)
+- [ADR-001: Internal Workflow Specification](docs/architecture/adr-001-internal-workflow-specification.md)
+- [ADR-002: Workflow Definition Parsing & Normalization](docs/architecture/adr-002-workflow-definition-parsing-strategy.md)
+- [ADR-003: Canonical Workflow Graph Representation](docs/architecture/adr-003-canonical-workflow-graph-representation.md)
+- [ADR-004: Workflow Validation Strategy](docs/architecture/adr-004-workflow-validation-strategy.md)
+- [ADR-005: Workflow Task Scheduling & Dispatch](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
+- [ADR-006: Workflow Execution State Machine](docs/architecture/adr-006-workflow-execution-state-machine.md)
+- [ADR-007: Task Execution Lifecycle & Attempt Model](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md)
+- [ADR-008: Worker Coordination & Liveness Model](docs/architecture/adr-008-worker-coordination-and-liveness-model.md)
+- [ADR-009: Task Routing Strategy](docs/architecture/adr-009-task-routing-strategy.md)
+- [ADR-010: Workflow Data Flow & Parameter Passing](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
+- [ADR-011: State Persistence Strategy](docs/architecture/adr-011-state-persistence-strategy.md)
+- [Architecture Decision Register](docs/architecture/00-architecture-decision-register.md)
 
 ---
 

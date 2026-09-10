@@ -803,7 +803,7 @@ def settle_attempt_cancelled(attempt: ExecutionAttempt) -> TransitionResult[Exec
 
 ## 10. Worker Session Domain Model
 
-A `WorkerSession` represents ephemeral in-process coordination state ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)).
+A `WorkerSession` represents ephemeral in-process coordination state ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)).
 
 > [!IMPORTANT]
 > **Security & Continuity Invariant:** `WorkerSessionId` is a runtime incarnation identity, **not** an authentication credential. Possession of a `WorkerSessionId` grants zero authorization on its own. Reconnecting an existing session requires establishing continuity of the surviving worker process under ADR-008, verified via session continuity proof handled at the worker-protocol/application boundary (LLD-05).
@@ -835,7 +835,7 @@ class WorkerSession:
 
 Domain services encapsulate multi-entity business rules without performing I/O or accessing databases:
 
-### 11.1 Routing Compatibility Service ([ADR-009](file:///docs/architecture/adr-009-task-routing.md))
+### 11.1 Routing Compatibility Service ([ADR-009](docs/architecture/adr-009-task-routing.md))
 ```python
 def is_worker_compatible(
     task_activity: ActivityType,
@@ -845,7 +845,7 @@ def is_worker_compatible(
     return task_activity in worker_capabilities
 ```
 
-### 11.2 Task Readiness Domain Service ([ADR-005](file:///docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md), [ADR-010](file:///docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md))
+### 11.2 Task Readiness Domain Service ([ADR-005](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md), [ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md))
 ```python
 @dataclass(frozen=True, slots=True)
 class TaskReadinessDecision(ABC):
@@ -900,7 +900,7 @@ def evaluate_task_readiness(
     return TaskReady(resolved_input=freeze_json(resolved_map))  # Guaranteed deeply immutable
 ```
 
-### 11.3 Engine-Owned Retry Policy Decision Service ([ADR-007](file:///docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md), [ADR-018](file:///docs/architecture/adr-018-error-handling-philosophy.md))
+### 11.3 Engine-Owned Retry Policy Decision Service ([ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md), [ADR-018](docs/architecture/adr-018-error-handling-philosophy.md))
 ```python
 @dataclass(frozen=True, slots=True)
 class RetryDecision(ABC):
@@ -932,7 +932,7 @@ def evaluate_retry_eligibility(
     return RetryAllowed()
 ```
 
-### 11.4 Named Workflow Output Resolution Service ([ADR-010](file:///docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md))
+### 11.4 Named Workflow Output Resolution Service ([ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md))
 ```python
 def resolve_workflow_output(
     output_bindings: Mapping[str, WorkflowOutputBinding],
@@ -969,7 +969,7 @@ def resolve_workflow_output(
 
 ## 12. Application Context & Security
 
-Security authentication is separated from attempt execution authority ([ADR-022](file:///docs/architecture/adr-022-security-architecture.md)):
+Security authentication is separated from attempt execution authority ([ADR-022](docs/architecture/adr-022-security-architecture.md)):
 
 ```python
 class PrincipalType(StrEnum):
@@ -1119,7 +1119,7 @@ class OperationAcknowledgedResult:
 
 ## 14. Persistence Port Contracts (Consistency Groups)
 
-Persistence ports are organized around **multi-entity transactional consistency groups** with explicit anti-TOCTOU semantic predicates ([ADR-011](file:///docs/architecture/adr-011-state-persistence.md), [ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)):
+Persistence ports are organized around **multi-entity transactional consistency groups** with explicit anti-TOCTOU semantic predicates ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
 
 ```python
 from typing import Protocol

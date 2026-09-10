@@ -8,7 +8,7 @@ This Architecture Decision Record (ADR) defines the testing architecture, verifi
 
 ## 2. Context
 
-NexusFlow V1 is an asynchronous workflow orchestrator built using Python 3.12, `asyncio`, FastAPI, Uvicorn, Pydantic v2, PostgreSQL 16, SQLAlchemy 2.0 Async, `asyncpg`, and Alembic (as decided in [ADR-020](file:///docs/architecture/adr-020-technology-selection.md)). Orchestration truth is maintained in PostgreSQL under `READ COMMITTED` isolation augmented by explicit integer-revision Optimistic Concurrency Control (OCC) ([ADR-013](file:///docs/architecture/adr-013-consistency-and-concurrency.md)). Coordination with distributed Python V1 workers occurs over an HTTP/JSON pull/long-poll protocol governed by a two-phase Candidate $\to$ Ownership handshake ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)).
+NexusFlow V1 is an asynchronous workflow orchestrator built using Python 3.12, `asyncio`, FastAPI, Uvicorn, Pydantic v2, PostgreSQL 16, SQLAlchemy 2.0 Async, `asyncpg`, and Alembic (as decided in [ADR-020](docs/architecture/adr-020-technology-selection.md)). Orchestration truth is maintained in PostgreSQL under `READ COMMITTED` isolation augmented by explicit integer-revision Optimistic Concurrency Control (OCC) ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)). Coordination with distributed Python V1 workers occurs over an HTTP/JSON pull/long-poll protocol governed by a two-phase Candidate $\to$ Ownership handshake ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)).
 
 Distributed asynchronous orchestration systems present complex failure modes. Bugs in these systems rarely present as simple single-threaded logic errors; rather, they emerge from:
 - Multi-connection OCC races where two workers claim the same task simultaneously,
@@ -46,9 +46,9 @@ while keeping the test suite fast, deterministic, maintainable by a solo develop
 - **REQ-TEST-001 (Invariant-Driven Verification)**: The test architecture must verify observable domain semantics and architectural invariants rather than coupling to internal implementation details.
 - **REQ-TEST-002 (Adversarial Race Verification)**: Concurrency control, OCC revisions, and state-machine transitions must be verified under explicit race interleavings using real database transactions.
 - **REQ-TEST-003 (Deterministic Timing)**: Time-dependent behavior (deadlines, timeouts, backoff delays) must be verified deterministically without wall-clock sleeps.
-- **REQ-TEST-004 (Atomicity & Consistency Groups)**: Transactional boundaries defined in [ADR-011](file:///docs/architecture/adr-011-state-persistence.md) (state + output + history) must be verified for all-or-nothing atomicity.
-- **REQ-TEST-005 (Crash Recovery & Idempotency)**: Crash recovery routines defined in [ADR-012](file:///docs/architecture/adr-012-recovery.md) must be verified across all valid lifecycle states and confirmed to be strictly idempotent.
-- **REQ-TEST-006 (Contract Integrity)**: Worker protocol ([ADR-008](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)) and public REST API ([ADR-015](file:///docs/architecture/adr-015-external-api-architecture.md)) must be verified at the wire boundary for schema compliance and error mapping ([ADR-018](file:///docs/architecture/adr-018-error-handling-philosophy.md)).
+- **REQ-TEST-004 (Atomicity & Consistency Groups)**: Transactional boundaries defined in [ADR-011](docs/architecture/adr-011-state-persistence.md) (state + output + history) must be verified for all-or-nothing atomicity.
+- **REQ-TEST-005 (Crash Recovery & Idempotency)**: Crash recovery routines defined in [ADR-012](docs/architecture/adr-012-recovery.md) must be verified across all valid lifecycle states and confirmed to be strictly idempotent.
+- **REQ-TEST-006 (Contract Integrity)**: Worker protocol ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)) and public REST API ([ADR-015](docs/architecture/adr-015-external-api-architecture.md)) must be verified at the wire boundary for schema compliance and error mapping ([ADR-018](docs/architecture/adr-018-error-handling-philosophy.md)).
 - **REQ-TEST-007 (Fast & Layered CI)**: The test portfolio must be organized into logical layers so that developers receive immediate feedback from in-memory tests while heavier infrastructure tests run reliably in CI.
 
 ---
@@ -79,7 +79,7 @@ while keeping the test suite fast, deterministic, maintainable by a solo develop
 - **No Mandatory Multi-Version Matrix**: Testing multiple Python or PostgreSQL versions is excluded for V1; only Python 3.12 and PostgreSQL 16 are verified.
 - **No Performance Threshold Guarantees in V1**: Formal performance benchmarking and load testing (via `k6`) are non-blocking and deferred until empirical baselines exist.
 - **No Kubernetes Chaos Testing**: Heavyweight chaos platforms (e.g., Chaos Mesh, Gremlin) are rejected for V1 in favor of adapter-level fault injection.
-- **No Security Mechanism Selection**: ADR-021 defines testing boundaries for security controls, but does not select authentication or authorization mechanisms (reserved for [ADR-022](file:///docs/architecture/adr-022-security-model.md)).
+- **No Security Mechanism Selection**: ADR-021 defines testing boundaries for security controls, but does not select authentication or authorization mechanisms (reserved for [ADR-022](docs/architecture/adr-022-security-model.md)).
 
 ---
 
@@ -137,7 +137,7 @@ NexusFlow V1 adopts a **Layered Invariant-Driven Testing Strategy**. Correctness
 6. **Real PostgreSQL 16 Integration Testing**: Persistence verification against real PostgreSQL 16 covering `READ COMMITTED` transactions, Alembic migrations, foreign keys, JSONB mapping, and database constraints.
 7. **Deterministic OCC / Concurrency Testing**: Multi-connection race testing using explicit synchronization barriers (`asyncio.Barrier`) to verify single-winner semantics, stale-write rejections, and fencing.
 8. **Worker Protocol Contract Testing**: Wire-level verification of the HTTP/JSON worker protocol covering registration, capability matching, Candidate $\to$ Ownership two-phase coordination, start observations, callbacks, and malformed payload rejection.
-9. **Public API Contract Testing**: External REST API verification covering idempotency key semantics, cursor pagination, filtering, and uniform machine-readable error envelopes per [ADR-015](file:///docs/architecture/adr-015-external-api-architecture.md) and [ADR-018](file:///docs/architecture/adr-018-error-handling-philosophy.md).
+9. **Public API Contract Testing**: External REST API verification covering idempotency key semantics, cursor pagination, filtering, and uniform machine-readable error envelopes per [ADR-015](docs/architecture/adr-015-external-api-architecture.md) and [ADR-018](docs/architecture/adr-018-error-handling-philosophy.md).
 10. **Failure-Injection Testing**: Adapter-level decorators simulating storage drops, ambiguous/unknown commit outcomes, worker transport failures, and telemetry exporter outages.
 11. **Recovery and Reconciliation Testing**: Verification of startup reconciliation, lost-wakeup rediscovery, expired deadline settlement, and recovery idempotency strictly from PostgreSQL snapshots without history replay.
 12. **Focused Docker Compose E2E Testing**: Containerized smoke suite verifying baseline end-to-end execution scenarios across control plane, PostgreSQL, and distributed Python workers.
@@ -320,25 +320,25 @@ In systems engineering interviews, NexusFlow's testing architecture illustrates 
 
 ## 25. References
 
-- [ADR-001: Internal Workflow Specification (IWS)](file:///docs/architecture/adr-001-internal-workflow-specification.md)
-- [ADR-003: Canonical Workflow Graph](file:///docs/architecture/adr-003-canonical-workflow-graph.md)
-- [ADR-004: Semantic Validation](file:///docs/architecture/adr-004-semantic-validation.md)
-- [ADR-005: Task Scheduling & Eligibility](file:///docs/architecture/adr-005-task-scheduling-and-eligibility.md)
-- [ADR-006: WorkflowExecution State Machine](file:///docs/architecture/adr-006-workflow-execution-state-machine.md)
-- [ADR-007: TaskExecution Lifecycle & ExecutionAttempt Model](file:///docs/architecture/adr-007-task-execution-lifecycle-and-execution-attempt-model.md)
-- [ADR-008: Worker Coordination & Liveness](file:///docs/architecture/adr-008-worker-coordination-and-liveness.md)
-- [ADR-009: Task Routing](file:///docs/architecture/adr-009-task-routing.md)
-- [ADR-010: Workflow Data Flow](file:///docs/architecture/adr-010-workflow-data-flow.md)
-- [ADR-011: State Persistence](file:///docs/architecture/adr-011-state-persistence.md)
-- [ADR-012: Recovery](file:///docs/architecture/adr-012-recovery.md)
-- [ADR-013: Consistency & Concurrency](file:///docs/architecture/adr-013-consistency-and-concurrency.md)
-- [ADR-014: Execution History & Audit](file:///docs/architecture/adr-014-execution-history-and-audit.md)
-- [ADR-015: External API Architecture](file:///docs/architecture/adr-015-external-api-architecture.md)
-- [ADR-016: Observability](file:///docs/architecture/adr-016-observability.md)
-- [ADR-017: Graceful Shutdown](file:///docs/architecture/adr-017-graceful-shutdown.md)
-- [ADR-018: Error Handling Philosophy](file:///docs/architecture/adr-018-error-handling-philosophy.md)
-- [ADR-019: Project & Service Boundaries](file:///docs/architecture/adr-019-project-and-service-boundaries.md)
-- [ADR-020: Technology Selection](file:///docs/architecture/adr-020-technology-selection.md)
+- [ADR-001: Internal Workflow Specification (IWS)](docs/architecture/adr-001-internal-workflow-specification.md)
+- [ADR-003: Canonical Workflow Graph](docs/architecture/adr-003-canonical-workflow-graph.md)
+- [ADR-004: Semantic Validation](docs/architecture/adr-004-semantic-validation.md)
+- [ADR-005: Task Scheduling & Eligibility](docs/architecture/adr-005-task-scheduling-and-eligibility.md)
+- [ADR-006: WorkflowExecution State Machine](docs/architecture/adr-006-workflow-execution-state-machine.md)
+- [ADR-007: TaskExecution Lifecycle & ExecutionAttempt Model](docs/architecture/adr-007-task-execution-lifecycle-and-execution-attempt-model.md)
+- [ADR-008: Worker Coordination & Liveness](docs/architecture/adr-008-worker-coordination-and-liveness.md)
+- [ADR-009: Task Routing](docs/architecture/adr-009-task-routing.md)
+- [ADR-010: Workflow Data Flow](docs/architecture/adr-010-workflow-data-flow.md)
+- [ADR-011: State Persistence](docs/architecture/adr-011-state-persistence.md)
+- [ADR-012: Recovery](docs/architecture/adr-012-recovery.md)
+- [ADR-013: Consistency & Concurrency](docs/architecture/adr-013-consistency-and-concurrency.md)
+- [ADR-014: Execution History & Audit](docs/architecture/adr-014-execution-history-and-audit.md)
+- [ADR-015: External API Architecture](docs/architecture/adr-015-external-api-architecture.md)
+- [ADR-016: Observability](docs/architecture/adr-016-observability.md)
+- [ADR-017: Graceful Shutdown](docs/architecture/adr-017-graceful-shutdown.md)
+- [ADR-018: Error Handling Philosophy](docs/architecture/adr-018-error-handling-philosophy.md)
+- [ADR-019: Project & Service Boundaries](docs/architecture/adr-019-project-and-service-boundaries.md)
+- [ADR-020: Technology Selection](docs/architecture/adr-020-technology-selection.md)
 - Hypothesis Documentation: https://hypothesis.readthedocs.io/
 - Testcontainers Python: https://testcontainers-python.readthedocs.io/
 
