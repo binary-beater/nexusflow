@@ -1,6 +1,6 @@
 ﻿# NexusFlow V1 — Systems & Architecture Interview Guide
 
-This guide prepares engineers to defend every architectural and concurrency decision in **NexusFlow V1**. NexusFlow is a fault-tolerant, durable workflow orchestration engine built around PostgreSQL as the sole durable authority.
+This guide prepares engineers to discuss and defend the architectural, persistence, and concurrency decisions in **NexusFlow V1**. NexusFlow is a correctness-focused, portfolio-grade distributed workflow orchestration engine with a single control plane and distributed external workers, backed by PostgreSQL 16 as the sole durable authority.
 
 ---
 
@@ -8,7 +8,7 @@ This guide prepares engineers to defend every architectural and concurrency deci
 
 ### Q1: Why is PostgreSQL the sole durable authority? Why not Redis, Kafka, or an event-sourcing log?
 **Answer:**
-1. **Zero Split-Brain Risk:** Having an external message broker (Kafka/RabbitMQ) and a database creates dual-write consistency hazards. In a distributed failure, reconciling out-of-sync message offsets with database rows requires complex two-phase commits.
+1. **Zero Split-Brain Ambiguity:** Relying on an external message broker (Kafka/RabbitMQ) and a database introduces dual-write consistency hazards. In partial failure scenarios, reconciling out-of-sync message offsets with database rows requires complex two-phase commits.
 2. **ACID Transactions as the Coordinator:** By modeling task offers, claims, attempts, and heartbeats directly in PostgreSQL, state transitions and invariant checks occur atomically in a single READ COMMITTED transaction.
 3. **Auditability Without Eventual Consistency:** History is stored as an immutable audit trail written within the same transaction that commits a state change. The active state is stored as concrete, strongly-typed rows, eliminating the need to replay thousands of events on startup to reconstruct state.
 
@@ -27,7 +27,7 @@ NexusFlow enforces a strict two-phase ownership model: **Candidate/Offer is NOT 
 
 ### Q3: When do you use Optimistic Concurrency Control (OCC) vs. Pessimistic Row Locking (SELECT ... FOR UPDATE)?
 **Answer:**
-- **OCC (evision = :expected_revision):** Used for **100% of normal execution lifecycle operations**—task polling, claim commits, start commits, heartbeat renewals, and successful completions. Because task instances are owned by a single worker session, write contention during normal execution is near zero.
+- **OCC (evision = :expected_revision):** Used for normal execution lifecycle operations—task polling, claim commits, start commits, heartbeat renewals, and successful completions. Because task instances are owned by a single worker session, write contention during normal execution is minimal.
 - **Narrow Row Locks (SELECT ... FOR UPDATE):** Strictly limited to **workflow direction boundaries**:
   - RUNNING -> FAILING (when an attempt failure causes retry budget exhaustion).
   - INITIALIZING/RUNNING -> CANCELLING (when a user or system issues a cancel command).
@@ -42,13 +42,14 @@ NexusFlow implements a stateless StartupRecoveryEngine that scans PostgreSQL upo
 2. **Orphaned CLAIMED Tasks:** If a worker claimed a task but died before calling start, its start_deadline_utc expires. The recovery engine fails the attempt with START_TIMEOUT and resets the task to RUNNABLE or RETRY_WAIT.
 3. **Dead Worker Sessions:** If heartbeats cease, the worker's session is marked dead. The recovery engine detects running attempts tied to dead sessions, marks them FAILED (WORKER_LOSS), and schedules retries.
 4. **Draining Workflows:** Workflows stuck in FAILING or CANCELLING are re-drained by cancelling all unstarted tasks and transitioning the workflow to terminal FAILED or CANCELLED.
+Durability across real restarts is empirically validated via automated container restart integration tests (	est_postgres_container_restart.py).
 
 ---
 
 ### Q5: Why is History an audit trail rather than an event source?
 **Answer:**
-In pure Event Sourcing, the state is derived by replaying past events. In workflow engines, replaying thousands of historical events on reboot creates unbounded startup latency, high memory pressure, and non-deterministic state recovery if event schemas evolve.
-NexusFlow stores state authoritatively in normal relational tables (workflow_executions, 	ask_executions, execution_attempts). The history_entries table is written append-only in the same database transaction solely for compliance, tracing, and user visibility.
+In pure Event Sourcing, the state is derived by replaying past events. In workflow engines, replaying historical events on reboot introduces startup latency and non-deterministic state recovery if event schemas evolve.
+NexusFlow stores state authoritatively in normal relational tables (workflow_executions, 	ask_executions, execution_attempts). The history_entries table is written append-only in the same database transaction solely for auditing, tracing, and user visibility.
 
 ---
 
@@ -62,4 +63,4 @@ Every worker callback (claim, start, heartbeat, succeed, ail, cancel_ack) inclu
 
 If a network timeout causes a worker to retry an HTTP callback that already succeeded:
 - The transaction checks if the attempt is already in the target state with identical output payload. If so, it returns 200 OK (idempotent duplicate acceptance) without modifying state or incrementing revisions.
-- If the session token or attempt ID does not match, the request is immediately rejected with 409 Conflict or 403 Forbidden.
+- If the session token or attempt ID does not match, the request is rejected with 409 Conflict or 403 Forbidden.

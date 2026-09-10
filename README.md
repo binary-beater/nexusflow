@@ -11,15 +11,15 @@ Deterministic, durable workflow orchestration engine backed by PostgreSQL 16 as 
 
 ## 1. Overview & Core Philosophy
 
-NexusFlow is an orchestrator designed to solve distributed task synchronization, failure recovery, and workflow state persistence with mathematical rigor and zero split-brain ambiguity.
+NexusFlow is a correctness-focused, portfolio-grade distributed workflow orchestration engine designed with a single control plane and distributed external workers, backed by PostgreSQL 16 as the sole durable authority.
 
 ### Key Architectural Invariants
 1. **PostgreSQL is the Sole Durable Authority (ADR-001):** No secondary brokers, queues, or distributed consensus engines (no Kafka, Redis, or Celery). Everything from task claims to heartbeat renewals is an atomic database transaction.
-2. **State Machine Integrity via Strict OCC (ADR-006, ADR-007):** 100% of normal execution lifecycle operations use Optimistic Concurrency Control (evision = :expected_revision).
+2. **State Machine Integrity via Strict OCC (ADR-006, ADR-007):** Normal execution lifecycle operations use Optimistic Concurrency Control (evision = :expected_revision).
 3. **Narrow Row Locks Limited to Direction Boundaries (ADR-008):** Pessimistic SELECT ... FOR UPDATE is strictly restricted to workflow direction changes (RUNNING -> FAILING, RUNNING -> CANCELLING) to prevent races during sibling task drains.
 4. **Candidate / Offer is NOT Ownership (ADR-009):** Tasks are offered to workers concurrently; ownership commits **only** upon successful creation of an execution_attempts record.
-5. **Auditable History is an Immutable Append-Only Log:** History entries are created in the same transaction as state transitions, but active state is stored in concrete relational tables.
-6. **Zero-Loss Crash Recovery (ADR-011):** Stateless recovery engine scans PostgreSQL upon startup or recovery cycle and reconciles incomplete workflows without event log replays.
+5. **Auditable History is an Immutable Append-Only Log:** History entries are created in the same transaction as state transitions, while active state is stored in concrete relational tables.
+6. **Recovery via Startup Reconciliation Engine (ADR-011):** Stateless recovery engine scans PostgreSQL upon startup or recovery cycle and reconciles incomplete workflows without event log replays.
 
 ---
 
@@ -134,7 +134,7 @@ stateDiagram-v2
     RUNNING --> FAILING: Permanent Failure / Retry Exhaustion
     note right of FAILING
       Acquires SELECT ... FOR UPDATE on owning workflow.
-      Drains all unstarted siblings to CANCELLED.
+      Drains unstarted siblings to CANCELLED.
     end note
 
     FAILING --> FAILED: In-Flight Attempts Settle
@@ -149,15 +149,15 @@ stateDiagram-v2
 
 Measured on **PostgreSQL 16 (postgres:16-alpine)** via enchmarks/benchmark_runner.py on Intel Core i7-1165G7 @ 2.80GHz:
 
-| Metric | Measured Result | Specification Defense |
+| Metric | Measured Result | Specification Context |
 | :--- | :--- | :--- |
-| **Pipeline Task Throughput** | **12.53 tasks/sec** | 100% durable commits across 3-stage pipeline |
+| **Pipeline Task Throughput** | **12.53 tasks/sec** | 40 workflows / 120 durable tasks on 3-stage linear pipeline |
 | **End-to-End Workflow Throughput** | **4.18 workflows/sec** | Complete DAG execution & success settlement |
-| **Scheduling Latency (p50 / Median)** | **116.76 ms** | Round-trip client submission to worker claim |
-| **Scheduling Latency (p95)** | **146.47 ms** | Sub-150ms tail latency under OCC concurrency |
-| **Scheduling Latency (p99)** | **150.91 ms** | Strict bound on tail latency |
+| **Client Submission to Claim Latency (p50)** | **116.76 ms** | Round-trip client submission to worker claim commit |
+| **Client Submission to Claim Latency (p95)** | **146.47 ms** | 95th percentile under OCC concurrency |
+| **Client Submission to Claim Latency (p99)** | **150.91 ms** | 99th percentile under OCC concurrency |
 | **Transient Retry Handling Rate** | **18.61 workflows/sec** | Flaky error backoff & retry recovery rate |
-| **Crash Recovery Rate** | **13.94 workflows/sec** | Reconciles orphaned workflows on reboot |
+| **Recovery Reconciliation Rate** | **13.94 workflows/sec** | Reconciles orphaned workflows via StartupRecoveryEngine |
 
 *Detailed benchmark report and methodology available at [docs/benchmarks/v1-local-benchmark.md](file:///c:/Users/KIIT/Desktop/nexusflow/docs/benchmarks/v1-local-benchmark.md).*
 
@@ -165,7 +165,7 @@ Measured on **PostgreSQL 16 (postgres:16-alpine)** via enchmarks/benchmark_runn
 
 ## 6. Quick Start
 
-### 1. Start Complete Docker Compose Stack
+### 1. Start Docker Compose Stack
 Starts PostgreSQL 16, Control Plane, Prometheus, Grafana, and Jaeger:
 `ash
 docker compose up -d
@@ -175,14 +175,14 @@ Service endpoints:
 - **NexusFlow API & OpenAPI Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Prometheus Metrics:** [http://localhost:9090](http://localhost:9090)
 - **Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (User: dmin, Pass: dmin)
-- **Jaeger Distributed Tracing:** [http://localhost:16686](http://localhost:16686)
+- **Jaeger Tracing:** [http://localhost:16686](http://localhost:16686)
 
 ### 2. Run Database Migrations
 `ash
 uv run alembic upgrade head
 `
 
-### 3. Run Live Demonstration Suite (Scenarios A through E)
+### 3. Run Demonstration Suite (Scenarios A through E)
 `ash
 uv run python examples/run_demos.py
 `
@@ -191,7 +191,7 @@ Outputs live trace for:
 - **Scenario B:** Flaky task retry and backoff recovery.
 - **Scenario C:** Retry exhaustion and controlled drain.
 - **Scenario D:** Cancellation lifecycle and sibling drain.
-- **Scenario E:** Cold crash recovery reconciliation.
+- **Scenario E:** Startup recovery & reconciliation demonstration.
 
 ### 4. Run Benchmark Suite
 `ash
@@ -200,7 +200,7 @@ uv run python benchmarks/benchmark_runner.py
 
 ### 5. Run Verification Quality Gates
 `ash
-# Automated Test Suite (100% Real PostgreSQL 16)
+# Automated Test Suite (Tested against real PostgreSQL 16)
 uv run pytest -v
 
 # Static Type Check & Linter
@@ -212,6 +212,6 @@ uv run ruff check .
 
 ## 7. Documentation Index
 - **[Interview Guide](file:///c:/Users/KIIT/Desktop/nexusflow/docs/interview-guide.md):** Deep-dive interview questions and architectural defenses.
-- **[Benchmark Report](file:///c:/Users/KIIT/Desktop/nexusflow/docs/benchmarks/v1-local-benchmark.md):** Complete performance measurements and methodology.
+- **[Benchmark Report](file:///c:/Users/KIIT/Desktop/nexusflow/docs/benchmarks/v1-local-benchmark.md):** Measured performance metrics and audit.
 - **[Architecture Decision Records (ADRs)](file:///c:/Users/KIIT/Desktop/nexusflow/docs/adr/):** ADR-001 through ADR-023.
 - **[Low-Level Designs (LLDs)](file:///c:/Users/KIIT/Desktop/nexusflow/docs/design/):** LLD-01 through LLD-10.

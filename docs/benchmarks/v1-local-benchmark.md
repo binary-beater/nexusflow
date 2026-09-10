@@ -14,60 +14,64 @@
 
 ## 1. Executive Summary
 
-NexusFlow V1 was subjected to end-to-end performance and stress benchmarking using real PostgreSQL 16 persistence transactions. No mock databases or in-memory SQLite instances were used. All transactions traversed the full HTTP/REST API stack, FastAPI middleware, state machine validation, optimistic concurrency control (OCC) checks, and durable PostgreSQL writes with WAL fsync.
+NexusFlow V1 was subjected to end-to-end performance and stress benchmarking using real PostgreSQL 16 persistence transactions. No in-memory SQLite instances were used for integration verification. All transactions traversed the full HTTP/REST API stack, FastAPI middleware, state machine validation, optimistic concurrency control (OCC) checks, and durable PostgreSQL writes with WAL fsync.
 
 | Workload | Target Characteristic | Measured Metric | Status |
 | :--- | :--- | :--- | :--- |
-| **Workload A** | Pipeline Throughput | **12.53 tasks/sec** (4.18 workflows/sec) | PASS |
-| **Workload B** | Scheduling & Ownership Latency | **p50: 116.76 ms**, **p95: 146.47 ms**, **p99: 150.91 ms** | PASS |
-| **Workload C** | Retry & Transient Failure Load | **18.61 workflows/sec** | PASS |
-| **Workload D** | Crash Recovery Reconciliation | **13.94 workflows/sec** | PASS |
+| **Workload A** | Pipeline Throughput | **12.53 tasks/sec** (4.18 workflows/sec) | MEASURED |
+| **Workload B** | Client Submission to Worker Claim Latency | **p50: 116.76 ms**, **p95: 146.47 ms**, **p99: 150.91 ms** | MEASURED |
+| **Workload C** | Retry & Transient Failure Load | **18.61 workflows/sec** | MEASURED |
+| **Workload D** | Recovery Reconciliation Throughput | **13.94 workflows/sec** | MEASURED |
 
 ---
 
 ## 2. Workload Breakdown & Analysis
 
-### Workload A: End-to-End Pipeline Throughput
+### Workload A: Pipeline Throughput
 - **Workload Spec:** 40 complete executions of a 3-stage linear pipeline (stage_a -> stage_b -> stage_c = 120 durable tasks).
-- **Execution Model:** Full client submission, scheduler DAG evaluation, worker long-polling, attempt ownership commit, JSON data-flow passing, and final workflow success settlement.
-- **Results:**
+- **Execution Model:** Client submission, scheduler DAG evaluation, worker long-polling, attempt ownership commit, JSON data-flow passing, and final workflow success settlement.
+- **Measured Results:**
   - Total Workflows: 40
   - Total Tasks Settled: 120
   - Wall-Clock Time: 9.575s
   - **Task Throughput:** 12.53 tasks/sec
   - **Workflow Throughput:** 4.18 workflows/sec
 
-### Workload B: Scheduling & Claim Latency Percentiles
-- **Workload Spec:** 40 single-stage workflow executions measuring the round-trip latency from client submission through scheduler runnable promotion, worker poll claim, execution attempt commit, and completion.
-- **Percentiles:**
+### Workload B: Client Submission to Worker Claim Latency Percentiles
+- **Workload Spec:** 40 single-stage workflow executions measuring the round-trip latency from client submission through scheduler runnable promotion, worker poll claim, and attempt ownership commit.
+- **Important Terminology Distinction:** This measures the end-to-end **Client Submission to Worker Claim** round-trip interval, not the isolated internal TaskExecution RUNNABLE -> Attempt CLAIMED scheduling interval.
+- **Measured Percentiles:**
   - **p50 (Median):** 116.76 ms
   - **p95:** 146.47 ms
   - **p99:** 150.91 ms
-- **Analysis:** Latency remains strictly bounded under 155 ms for 99% of requests on single-node hardware with Docker volume I/O overhead.
 
 ### Workload C: Retry & Transient Error Load Handling
 - **Workload Spec:** 25 workflows configured with retry policies subjected to simulated transient errors (503 / connection resets), testing state transitions through RETRY_WAIT, backoff calculation, and subsequent attempt settlement.
-- **Results:**
+- **Measured Results:**
   - Workflows Processed: 25
   - Wall-Clock Time: 1.343s
   - **Rate:** 18.61 workflows/sec
-  - OCC Conflicts / Data Corruption: **0**
 
-### Workload D: Crash Recovery Reconciliation
-- **Workload Spec:** 30 orphaned, interrupted workflows injected into PostgreSQL in INITIALIZING and un-heartbeated states, followed by a simulated cold restart of the control plane running StartupRecoveryEngine.recover_system().
-- **Results:**
+### Workload D: Startup Recovery Reconciliation Throughput
+- **Workload Spec:** 30 interrupted workflows injected into PostgreSQL in INITIALIZING and un-heartbeated states, followed by execution of StartupRecoveryEngine.recover_system().
+- **Measured Results:**
   - Interrupted Workflows Reconciled: 30
   - Wall-Clock Time: 2.152s
   - **Reconciliation Rate:** 13.94 workflows/sec
-  - Orphan Leakage: **0%**
 
 ---
 
-## 3. Resume & Architectural Claims Defensibility
+## 3. Resume & Portfolio Metrics Audit
 
-| Resume / Portfolio Claim | Empirical Proof / Defense |
-| :--- | :--- |
-| *Designed durable workflow engine with zero-loss crash recovery* | Proved by Workload D and Scenario E: 100% of orphaned workflows and un-heartbeated tasks are recovered into actionable states without data loss. |
-| *Implemented OCC concurrency with sub-150ms scheduling latency* | Measured p50: 116.76 ms, p95: 146.47 ms with zero lost updates under concurrent attempt ownership commits. |
-| *Built linear-scaling task scheduler handling 10+ tasks/sec locally* | Empirically verified 12.53 tasks/sec through full PostgreSQL 16 persistence transactions with full auditing. |
-| *Enforced strict state machine consistency with zero lock contention* | Row locks strictly restricted to direction boundaries (RUNNING -> FAILING, RUNNING -> CANCELLING), while 100% of normal execution operates under non-blocking OCC. |
+| Claim | Status | Empirical Measurement / Context |
+| :--- | :--- | :--- |
+| **100+ workflows executed** | **NOT VERIFIED** | Current benchmark suite measured 40 workflows in Workload A, 40 in Workload B, 25 in Workload C, and 30 in Workload D across separate runs. A single continuous 100+ workflow run was not executed. |
+| **1,000+ tasks processed** | **NOT VERIFIED** | Workload A executed 120 durable tasks. The 1,000+ task continuous target was not measured in this workload. |
+| **95%+ success rate** | **NOT VERIFIED** | Workload A completed with 100% success (40/40), but has not been measured over a large-scale statistical run. |
+| **Median scheduling latency < 200 ms** | **MISLEADING** | The measured p50 of 116.76 ms represents the end-to-end Client Submission to Worker Claim round-trip; the isolated internal RUNNABLE -> CLAIMED scheduler interval was not independently benchmarked in Workload B. |
+
+### Measured Metrics Safe for Portfolio Use
+- **Measured 12.53 tasks/sec (4.18 workflows/sec)** in a local 3-stage linear pipeline backed by PostgreSQL 16.
+- **Measured median client-submission-to-worker-claim latency of 116.76 ms** (p95: 146.47 ms, p99: 150.91 ms).
+- **Demonstrated recovery reconciliation rate of 13.94 workflows/sec** repairing orphaned states via StartupRecoveryEngine.
+- **Verified 67 automated integration tests** validating state machine correctness, OCC concurrency, worker timeouts, and container restart durability.

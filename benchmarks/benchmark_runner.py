@@ -108,7 +108,8 @@ async def run_workload_a(client: AsyncClient, num_workflows: int = 50):
 
 
 async def run_workload_b(client: AsyncClient, samples: int = 50):
-    print(f"\n--- Workload B: Scheduling & Claim Latency Percentiles ({samples} samples) ---")
+    print(f"\n--- Workload B: End-to-End Task Invocation & Claim Latency Percentiles ({samples} samples) ---")
+    print("    Note: Measures round-trip from client POST /v1/executions through worker poll & attempt claim commit.")
     yaml_content = """
 workflow_name: bench_latency
 tasks:
@@ -160,9 +161,9 @@ output_bindings:
     p95 = latencies_ms[int(len(latencies_ms) * 0.95)]
     p99 = latencies_ms[int(len(latencies_ms) * 0.99)]
 
-    print(f"p50 Latency: {p50:.2f} ms")
-    print(f"p95 Latency: {p95:.2f} ms")
-    print(f"p99 Latency: {p99:.2f} ms")
+    print(f"p50 Latency (Submission-to-Claim): {p50:.2f} ms")
+    print(f"p95 Latency (Submission-to-Claim): {p95:.2f} ms")
+    print(f"p99 Latency (Submission-to-Claim): {p99:.2f} ms")
 
     await worker.stop()
     return {"p50_ms": p50, "p95_ms": p95, "p99_ms": p99}
@@ -336,9 +337,9 @@ async def main():
     print("BENCHMARK RESULTS SUMMARY:")
     print(f"Workload A - Task Throughput:         {res_a['tasks_per_sec']:.2f} tasks/sec")
     print(f"Workload A - Workflow Throughput:     {res_a['wf_per_sec']:.2f} workflows/sec")
-    print(f"Workload B - Median Latency (p50):    {res_b['p50_ms']:.2f} ms")
-    print(f"Workload B - 95th Percentile (p95):   {res_b['p95_ms']:.2f} ms")
-    print(f"Workload B - 99th Percentile (p99):   {res_b['p99_ms']:.2f} ms")
+    print(f"Workload B - Median Submission-to-Claim Latency (p50):  {res_b['p50_ms']:.2f} ms")
+    print(f"Workload B - 95th Percentile Latency (p95):             {res_b['p95_ms']:.2f} ms")
+    print(f"Workload B - 99th Percentile Latency (p99):             {res_b['p99_ms']:.2f} ms")
     print(f"Workload C - Retry Handling Rate:     {res_c['retries_per_sec']:.2f} workflows/sec")
     print(f"Workload D - Recovery Reconciliation: {res_d['reconciled_per_sec']:.2f} workflows/sec")
     print("=" * 75)

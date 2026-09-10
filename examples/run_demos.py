@@ -5,7 +5,7 @@ Executes end-to-end scenarios against PostgreSQL 16:
 - Scenario B: Transient Retry & Backoff (flaky task -> RETRY_WAIT -> Attempt 2 Success)
 - Scenario C: Permanent Failure Exhaustion & Controlled Drain (FAILING -> drain -> FAILED)
 - Scenario D: Cancellation Lifecycle & In-Flight Drain (CANCELLING -> CANCELLED)
-- Scenario E: Crash Recovery Reconciliation (StartupRecoveryEngine recovers orphaned workflow)
+- Scenario E: Startup Recovery & Reconciliation (StartupRecoveryEngine recovers orphaned workflow)
 """
 
 import asyncio
@@ -501,7 +501,7 @@ async def _run_all_standalone():
         await test_e2e_cancellation_lifecycle(ctx)
         print("      PASS: Cancellation triggered idempotent CANCELLING/CANCELLED state.")
 
-        print("[5/5] Scenario E: Running Crash Recovery Engine...")
+        print("[5/5] Scenario E: Running Startup Recovery & Reconciliation Demonstration...")
         await test_e2e_scenario_e_crash_recovery(ctx)
         print("      PASS: StartupRecoveryEngine reconciled incomplete workflow safely.")
 
