@@ -887,22 +887,22 @@ sequenceDiagram
     participant Sched as Scheduling Coordinator
     participant DB as PostgreSQL Persistence
 
-    Client->>API: POST /executions (DefinitionId, Input)<br>[Authorization: Bearer Public Token, Idempotency-Key]
+    Client->>API: POST /executions (DefinitionId, Input)<br/>Authorization Bearer Public Token, Idempotency-Key
     API->>API: Authenticate Token (executions:start)
     API->>UseCase: execute(DefinitionId, Input, IdempotencyKey)
 
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Phase 1: Durable Workflow Creation (INITIALIZING)
         UseCase->>DB: Check IdempotencyKey; Read Validated IWS
-        UseCase->>DB: Commit Workflow Creation Consistency Group:<br>* INSERT workflow_executions (state='INITIALIZING', input=:input)<br>* Append HistoryEntry
+        UseCase->>DB: Commit Workflow Creation Consistency Group:<br/>INSERT workflow_executions (INITIALIZING, input)<br/>Append HistoryEntry
         DB-->>UseCase: Commit Successful
     end
 
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Phase 2: Task Population & Completeness Verification
-        UseCase->>DB: Commit Task Population Consistency Group:<br>* INSERT task_executions (All declared tasks in PENDING state)
+        UseCase->>DB: Commit Task Population Consistency Group:<br/>INSERT task_executions (All declared tasks in PENDING state)
         DB-->>UseCase: Commit Successful
-        UseCase->>DB: Commit Initialization Completion Consistency Group:<br>* Verify complete expected task set exists<br>* UPDATE workflow_executions (INITIALIZING -> RUNNING, revision+1)<br>* Append HistoryEntry
+        UseCase->>DB: Commit Initialization Completion Consistency Group:<br/>Verify complete expected task set exists<br/>UPDATE workflow_executions (INITIALIZING to RUNNING, revision+1)<br/>Append HistoryEntry
         DB-->>UseCase: Commit Successful
     end
 
@@ -930,7 +930,7 @@ sequenceDiagram
 
     rect rgb(235, 245, 255)
         Note over Rec,DB: Authoritative Snapshot Recovery (ADR-012)
-        Rec->>DB: Scan active WorkflowExecutions ('INITIALIZING', 'RUNNING', 'FAILING', 'CANCELLING')
+        Rec->>DB: Scan active WorkflowExecutions (INITIALIZING, RUNNING, FAILING, CANCELLING)
         Rec->>DB: Identify expired start_deadline_utc and execution_timeout_utc
         Rec->>DB: Fail overdue CLAIMED attempts; reschedule or fail tasks
         Rec->>DB: Identify elapsed retry_ready_at_utc in RETRY_WAIT tasks; transition to RUNNABLE
