@@ -1,0 +1,91 @@
+{
+  "timestamp_utc": "2026-09-10T13:19:33.115904+00:00",
+  "workload": {
+    "workflows_per_run": 350,
+    "tasks_per_run": 1050,
+    "total_runs": 3,
+    "pipeline_stages": 3,
+    "total_durable_tasks_verified": 3150
+  },
+  "aggregate": {
+    "median_tasks_per_sec": 13.120710085416002,
+    "min_tasks_per_sec": 12.945755097667146,
+    "max_tasks_per_sec": 13.59229399469462,
+    "median_wf_per_sec": 4.373570028472001,
+    "median_ownership_latency_p50_ms": 11.6945,
+    "median_ownership_latency_p95_ms": 17.856,
+    "median_ownership_latency_p99_ms": 22.386,
+    "median_ownership_latency_mean_ms": 9.822882857142858
+  },
+  "runs": [
+    {
+      "run_id": 1,
+      "elapsed_s": 80.02615660009906,
+      "wf_per_sec": 4.373570028472001,
+      "tasks_per_sec": 13.120710085416002,
+      "workflow_states": {
+        "SUCCEEDED": 350
+      },
+      "task_states": {
+        "SUCCEEDED": 1050
+      },
+      "attempt_states": {
+        "SUCCEEDED": 1050
+      },
+      "latency_stats": {
+        "min_ms": 0.0,
+        "mean_ms": 9.785421904761904,
+        "p50_ms": 11.5985,
+        "p95_ms": 18.450999999999997,
+        "p99_ms": 22.386,
+        "max_ms": 27.151999999999997
+      }
+    },
+    {
+      "run_id": 2,
+      "elapsed_s": 81.10766750015318,
+      "wf_per_sec": 4.315251699222382,
+      "tasks_per_sec": 12.945755097667146,
+      "workflow_states": {
+        "SUCCEEDED": 350
+      },
+      "task_states": {
+        "SUCCEEDED": 1050
+      },
+      "attempt_states": {
+        "SUCCEEDED": 1050
+      },
+      "latency_stats": {
+        "min_ms": 0.0,
+        "mean_ms": 10.354594285714287,
+        "p50_ms": 12.5425,
+        "p95_ms": 17.856,
+        "p99_ms": 22.746,
+        "max_ms": 47.862
+      }
+    },
+    {
+      "run_id": 3,
+      "elapsed_s": 77.24965339992195,
+      "wf_per_sec": 4.530764664898206,
+      "tasks_per_sec": 13.59229399469462,
+      "workflow_states": {
+        "SUCCEEDED": 350
+      },
+      "task_states": {
+        "SUCCEEDED": 1050
+      },
+      "attempt_states": {
+        "SUCCEEDED": 1050
+      },
+      "latency_stats": {
+        "min_ms": 0.0,
+        "mean_ms": 9.822882857142858,
+        "p50_ms": 11.6945,
+        "p95_ms": 17.683,
+        "p99_ms": 21.475,
+        "max_ms": 47.984
+      }
+    }
+  ]
+}

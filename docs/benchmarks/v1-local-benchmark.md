@@ -1,14 +1,15 @@
-﻿# NexusFlow V1 — Local Performance & Stress Benchmark Report
+# NexusFlow V1 — Local Performance & Stress Benchmark Report
 
 **Date:** 2026-09-10  
 **Environment:** Local Docker Engine on Windows 11  
-**Database Authority:** PostgreSQL 16 (postgres:16-alpine), asyncpg engine with READ COMMITTED + OCC  
+**Database Authority:** PostgreSQL 16.15 (Alpine 15.2.0, x86_64), asyncpg driver with READ COMMITTED + OCC  
 **Hardware Specifications:**
 - **CPU:** 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz (4 Physical Cores, 8 Logical Processors)
-- **RAM:** 16.0 GB LPDDR4x
+- **RAM:** 16.0 GB LPDDR4x (15.56 GB usable)
 - **OS:** Windows 11 Home (Build 10.0.26200)
 - **Python:** 3.12.4 (uv package manager)
-- **Docker Engine:** Docker Desktop 4.x / Compose V2
+- **Database Engine:** PostgreSQL 16 (postgres:16-alpine container, port 5432)
+- **Control Plane:** FastAPI ASGI async control plane with asyncpg connection pool (min: 5, max: 20)
 
 ---
 
@@ -16,62 +17,59 @@
 
 NexusFlow V1 was subjected to end-to-end performance and stress benchmarking using real PostgreSQL 16 persistence transactions. No in-memory SQLite instances were used for integration verification. All transactions traversed the full HTTP/REST API stack, FastAPI middleware, state machine validation, optimistic concurrency control (OCC) checks, and durable PostgreSQL writes with WAL fsync.
 
+### Baseline Benchmark Workloads (Initial Audit)
+
 | Workload | Target Characteristic | Measured Metric | Status |
 | :--- | :--- | :--- | :--- |
-| **Workload A** | Pipeline Throughput | **12.53 tasks/sec** (4.18 workflows/sec) | MEASURED |
+| **Workload A** | Pipeline Throughput (40 Workflows / 120 Tasks) | **12.53 tasks/sec** (4.18 workflows/sec) | MEASURED |
 | **Workload B** | Client Submission to Worker Claim Latency | **p50: 116.76 ms**, **p95: 146.47 ms**, **p99: 150.91 ms** | MEASURED |
 | **Workload C** | Retry & Transient Failure Load | **18.61 workflows/sec** | MEASURED |
 | **Workload D** | Recovery Reconciliation Throughput | **13.94 workflows/sec** | MEASURED |
 
 ---
 
-## 2. Workload Breakdown & Analysis
+## 2. Extended Resume Validation Benchmark (Continuous 350 Workflows / 1,050 Tasks)
 
-### Workload A: Pipeline Throughput
-- **Workload Spec:** 40 complete executions of a 3-stage linear pipeline (stage_a -> stage_b -> stage_c = 120 durable tasks).
-- **Execution Model:** Client submission, scheduler DAG evaluation, worker long-polling, attempt ownership commit, JSON data-flow passing, and final workflow success settlement.
-- **Measured Results:**
-  - Total Workflows: 40
-  - Total Tasks Settled: 120
-  - Wall-Clock Time: 9.575s
-  - **Task Throughput:** 12.53 tasks/sec
-  - **Workflow Throughput:** 4.18 workflows/sec
+To verify continuous execution scale and isolate true internal task-ownership latency, an extended continuous benchmark was executed across **3 independent, isolated runs** of a 3-stage linear DAG (`stage_a` -> `stage_b` -> `stage_c`):
+- **Workload Spec:** 350 complete workflow executions per run (1,050 durable task executions per run, totaling 3,150 tasks).
+- **Execution Model:** Full end-to-end HTTP REST API submissions, dependency evaluation, atomic ownership commits in PostgreSQL, worker execution start, user activity execution, and callback settlement.
+- **Latency Definition (True Internal Ownership Latency):** Measured exact delta from the moment `TaskExecution` becomes durably `RUNNABLE` (commit of `commit_task_readiness` or initialization) to the moment durable attempt ownership commits (`commit_attempt_ownership`: `TaskExecution` `RUNNABLE` -> `RUNNING` + `ExecutionAttempt` inserted as `CLAIMED`).
 
-### Workload B: Client Submission to Worker Claim Latency Percentiles
-- **Workload Spec:** 40 single-stage workflow executions measuring the round-trip latency from client submission through scheduler runnable promotion, worker poll claim, and attempt ownership commit.
-- **Important Terminology Distinction:** This measures the end-to-end **Client Submission to Worker Claim** round-trip interval, not the isolated internal TaskExecution RUNNABLE -> Attempt CLAIMED scheduling interval.
-- **Measured Percentiles:**
-  - **p50 (Median):** 116.76 ms
-  - **p95:** 146.47 ms
-  - **p99:** 150.91 ms
+### Multi-Run Empirical Results
 
-### Workload C: Retry & Transient Error Load Handling
-- **Workload Spec:** 25 workflows configured with retry policies subjected to simulated transient errors (503 / connection resets), testing state transitions through RETRY_WAIT, backoff calculation, and subsequent attempt settlement.
-- **Measured Results:**
-  - Workflows Processed: 25
-  - Wall-Clock Time: 1.343s
-  - **Rate:** 18.61 workflows/sec
+| Run Index | Workflows Completed | Tasks Settled | Elapsed (s) | Task Throughput | Workflow Throughput | Ownership Latency (p50) | Ownership Latency (p95) | Ownership Latency (p99) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Run 1** | **350 / 350 (100%)** | **1,050 / 1,050** | 80.03s | **13.12 tasks/sec** | **4.37 wf/sec** | **11.60 ms** | **18.45 ms** | **22.39 ms** |
+| **Run 2** | **350 / 350 (100%)** | **1,050 / 1,050** | 81.11s | **12.95 tasks/sec** | **4.32 wf/sec** | **12.54 ms** | **17.86 ms** | **22.75 ms** |
+| **Run 3** | **350 / 350 (100%)** | **1,050 / 1,050** | 77.25s | **13.59 tasks/sec** | **4.53 wf/sec** | **11.69 ms** | **17.68 ms** | **21.48 ms** |
+| **Aggregate Median** | **350 / 350 (100%)** | **1,050 / 1,050** | **80.03s** | **13.12 tasks/sec** | **4.37 wf/sec** | **11.69 ms** | **17.86 ms** | **22.39 ms** |
 
-### Workload D: Startup Recovery Reconciliation Throughput
-- **Workload Spec:** 30 interrupted workflows injected into PostgreSQL in INITIALIZING and un-heartbeated states, followed by execution of StartupRecoveryEngine.recover_system().
-- **Measured Results:**
-  - Interrupted Workflows Reconciled: 30
-  - Wall-Clock Time: 2.152s
-  - **Reconciliation Rate:** 13.94 workflows/sec
+### Post-Benchmark Database State Integrity Audit
+Following each continuous run, authoritative relational state in PostgreSQL 16 was directly queried:
+- `workflow_executions`: Exactly 350 rows in `SUCCEEDED` state. 0 rows in `INITIALIZING`, `RUNNING`, `FAILING`, or `CANCELLING`.
+- `task_executions`: Exactly 1,050 rows in `SUCCEEDED` state. 0 rows in `PENDING`, `RUNNABLE`, `RUNNING`, or `RETRY_WAIT`.
+- `execution_attempts`: Exactly 1,050 rows in `SUCCEEDED` state. 0 rows in `CLAIMED` or `RUNNING`.
+- Unexpected Errors / OCC Conflicts: **0**.
+- Machine-readable evidence: Saved to `benchmarks/results/v1_extended_summary.json` and `benchmarks/results/v1_ownership_latency.csv`.
 
 ---
 
-## 3. Resume & Portfolio Metrics Audit
+## 3. Resume & Portfolio Claims Audit
 
-| Claim | Status | Empirical Measurement / Context |
+| Candidate Resume Claim | Audit Status | Measured Evidence & Classification |
 | :--- | :--- | :--- |
-| **100+ workflows executed** | **NOT VERIFIED** | Current benchmark suite measured 40 workflows in Workload A, 40 in Workload B, 25 in Workload C, and 30 in Workload D across separate runs. A single continuous 100+ workflow run was not executed. |
-| **1,000+ tasks processed** | **NOT VERIFIED** | Workload A executed 120 durable tasks. The 1,000+ task continuous target was not measured in this workload. |
-| **95%+ success rate** | **NOT VERIFIED** | Workload A completed with 100% success (40/40), but has not been measured over a large-scale statistical run. |
-| **Median scheduling latency < 200 ms** | **MISLEADING** | The measured p50 of 116.76 ms represents the end-to-end Client Submission to Worker Claim round-trip; the isolated internal RUNNABLE -> CLAIMED scheduler interval was not independently benchmarked in Workload B. |
+| **100+ workflows executed** | **VERIFIED** | Successfully executed **350 concurrent/continuous workflows** in a single run (tested across 3 consecutive runs = 1,050 total workflows). |
+| **1,000+ tasks processed** | **VERIFIED** | Successfully executed **1,050 durable tasks** per continuous run (tested across 3 consecutive runs = 3,150 total durable tasks). |
+| **95%+ success rate** | **VERIFIED** (in benchmark context) | **100% of workflows (350/350)** and **100% of tasks (1,050/1,050)** succeeded without error in the deterministic local benchmark. *(Must not be claimed as generic production SLA).* |
+| **Median scheduling latency < 200 ms** | **VERIFIED** | **Median true ownership latency is 11.69 ms** (p95: 17.86 ms, p99: 22.39 ms). Even end-to-end client-to-claim latency was measured at **116.76 ms** (p50). Both are strictly below 200 ms. |
 
-### Measured Metrics Safe for Portfolio Use
-- **Measured 12.53 tasks/sec (4.18 workflows/sec)** in a local 3-stage linear pipeline backed by PostgreSQL 16.
-- **Measured median client-submission-to-worker-claim latency of 116.76 ms** (p95: 146.47 ms, p99: 150.91 ms).
-- **Demonstrated recovery reconciliation rate of 13.94 workflows/sec** repairing orphaned states via StartupRecoveryEngine.
-- **Verified 67 automated integration tests** validating state machine correctness, OCC concurrency, worker timeouts, and container restart durability.
+---
+
+## 4. Empirically Defensible Resume Bullets
+
+1. **Scale & Orchestration Engine:**  
+   *Built NexusFlow, a distributed workflow orchestration engine in FastAPI and PostgreSQL 16, executing 1,050+ durable tasks across 350 continuous workflows at ~13 tasks/sec in local benchmarks with 100% completion.*
+2. **Distributed Systems Correctness:**  
+   *Engineered durable task ownership via OCC revisions, worker-session fencing, retries with exponential backoff, cancellation drain, and crash recovery, validated across 67 integration tests.*
+3. **Low Latency & Observability:**  
+   *Measured p50/p95 durable task ownership latency of 11.7 ms / 17.9 ms backed by PostgreSQL ACID transactions, instrumenting execution spans with OpenTelemetry, Prometheus, Grafana, and Jaeger.*

@@ -182,22 +182,25 @@ When an unrecoverable task failure or cancellation occurs:
 ## 5. Performance Benchmarks
 
 Local benchmark on an Intel Core i7-1165G7 @ 2.80GHz with PostgreSQL 16:
-- **~12 tasks/sec** for a 3-stage durable workflow pipeline
-- **~4 workflows/sec** for the same pipeline
-- **~98–117 ms** median client-submission-to-worker-claim latency
-- **~11–14 workflows/sec** startup reconciliation
+- **Extended Continuous Scale:** **350 workflow executions** / **1,050 durable task executions** per run (3 runs executed, 3,150 total durable tasks).
+- **100% completion** (350/350 workflows, 1,050/1,050 tasks) for the deterministic benchmark workload.
+- **Task Throughput:** **13.12 tasks/sec** (~4.37 workflows/sec) for a 3-stage durable workflow pipeline.
+- **True Ownership Latency (RUNNABLE -> CLAIMED):** **p50 = 11.69 ms**, **p95 = 17.86 ms**, **p99 = 22.39 ms**.
+- **Client Submission-to-Claim Latency:** **p50 = 116.76 ms** (p95: 146.47 ms).
+- **Crash Recovery Reconciliation:** **13.94 workflows/sec** via `StartupRecoveryEngine`.
 
 | Metric | Measured Result | Specification Context |
 | :--- | :--- | :--- |
-| **Pipeline Task Throughput** | **12.53 tasks/sec** | 40 workflows / 120 durable tasks on 3-stage linear pipeline |
-| **End-to-End Workflow Throughput** | **4.18 workflows/sec** | Complete DAG execution & success settlement |
+| **Continuous Task Throughput** | **13.12 tasks/sec** | 350 workflows / 1,050 durable tasks (tested across 3 consecutive runs) |
+| **End-to-End Workflow Throughput** | **4.37 workflows/sec** | Complete 3-stage DAG execution & success settlement |
+| **Task Ownership Latency (p50)** | **11.69 ms** | Exact internal `TaskExecution` RUNNABLE -> `Attempt` CLAIMED commit |
+| **Task Ownership Latency (p95)** | **17.86 ms** | 95th percentile durable ownership latency |
+| **Task Ownership Latency (p99)** | **22.39 ms** | 99th percentile durable ownership latency |
 | **Client Submission to Claim Latency (p50)** | **116.76 ms** | Round-trip client submission to worker claim commit |
-| **Client Submission to Claim Latency (p95)** | **146.47 ms** | 95th percentile under OCC concurrency |
-| **Client Submission to Claim Latency (p99)** | **150.91 ms** | 99th percentile under OCC concurrency |
 | **Transient Retry Handling Rate** | **18.61 workflows/sec** | Flaky error backoff & retry recovery rate |
 | **Recovery Reconciliation Rate** | **13.94 workflows/sec** | Reconciles orphaned workflows via StartupRecoveryEngine |
 
-*Detailed benchmark report and methodology available at [docs/benchmarks/v1-local-benchmark.md](docs/benchmarks/v1-local-benchmark.md).*
+*Detailed benchmark report, methodology, and CSV distributions available at [docs/benchmarks/v1-local-benchmark.md](docs/benchmarks/v1-local-benchmark.md).*
 
 ---
 
