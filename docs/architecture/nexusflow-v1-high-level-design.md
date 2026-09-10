@@ -4,7 +4,7 @@
 
 ## 1. Document Purpose
 
-This document provides the canonical High-Level Design (HLD) for NexusFlow V1. It synthesizes the complete set of approved architectural decisions ([ADR-001 through ADR-023](docs/architecture/00-architecture-decision-register.md)) into a unified, implementation-oriented system design. 
+This document provides the canonical High-Level Design (HLD) for NexusFlow V1. It synthesizes the complete set of approved architectural decisions ([ADR-001 through ADR-023](00-architecture-decision-register.md)) into a unified, implementation-oriented system design.
 
 The primary objective of this HLD is to answer:
 > **How do all approved NexusFlow V1 architectural decisions operate together as a single, coherent distributed orchestration system?**
@@ -24,10 +24,10 @@ This document serves as the authoritative blueprint bridging high-level architec
 - **Reference Deployment**: Containerized multi-service topology managed via Docker Compose.
 
 ### Out-of-Scope (Deferred to V2+)
-- Multi-node control plane high availability, clustering, and leader election ([ADR-025](docs/architecture/adr-025-high-availability-and-clustering.md)).
-- Dynamic workflow definition version migration ([ADR-024](docs/architecture/adr-024-workflow-versioning-strategy.md)).
-- Multi-language worker SDKs ([ADR-026](docs/architecture/adr-026-multi-language-sdk-architecture.md)).
-- Graphical operations dashboard UI ([ADR-027](docs/architecture/adr-027-dashboard-architecture.md)).
+- Multi-node control plane high availability, clustering, and leader election (ADR-025 (Deferred)).
+- Dynamic workflow definition version migration (ADR-024 (Deferred)).
+- Multi-language worker SDKs (ADR-026 (Deferred)).
+- Graphical operations dashboard UI (ADR-027 (Deferred)).
 - Multi-tenancy, dynamic quotas, Redis/message broker integration, and arbitrary activity container sandboxing.
 
 ---
@@ -37,17 +37,17 @@ This document serves as the authoritative blueprint bridging high-level architec
 The design of NexusFlow V1 is governed by twelve foundational engineering principles:
 
 1. **Correctness Over Performance**: State corruption, duplicate progression, lost completions, or orphaned entities are completely unacceptable. Latency is secondary to consistency.
-2. **Configuration Tunes Mechanisms; It Does Not Redefine Architecture**: Configuration parameterizes operational thresholds (timeouts, pool sizes, batch limits); it cannot alter state machines, dependency rules, or persistence atomicity ([ADR-023](docs/architecture/adr-023-configuration-architecture.md)).
+2. **Configuration Tunes Mechanisms; It Does Not Redefine Architecture**: Configuration parameterizes operational thresholds (timeouts, pool sizes, batch limits); it cannot alter state machines, dependency rules, or persistence atomicity ([ADR-023](adr-023-configuration-architecture.md)).
 3. **Explicit Behavior Over Implicit Magic**: Transitions, timeouts, retries, and worker coordination follow explicit state-machine events and OCC revisions. No hidden background state synthesis.
-4. **Recovery as a First-Class Citizen**: System crashes are expected operational events. Control-plane startup reconciliation restores orchestration truth strictly from durable database snapshots without replaying history or reparsing YAML ([ADR-012](docs/architecture/adr-012-recovery.md)).
-5. **Separation of Authentication from Orchestration Authority**: Identity verification (`Bearer` token) proves membership in a security domain; execution authority (`WorkerSessionId`, `AttemptId`, OCC revision) proves rights to mutate a specific attempt ([ADR-022](docs/architecture/adr-022-security-architecture.md)).
-6. **Two-Phase Coordination (Candidate $\to$ Ownership)**: Offering work to a worker creates no attempt and consumes no retries. Authoritative ownership commits atomically in PostgreSQL before execution dispatch ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)).
-7. **Transactional Atomicity Across Consistency Groups**: State transitions, authoritative outputs, and audit history entries commit all-or-nothing in single SQL transactions ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)).
-8. **No Remote Network I/O Inside State Transactions**: Database transactions never block on worker HTTP requests, telemetry exports, or external services ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)).
-9. **Current State is Authoritative; History is Audit**: Orchestration decisions inspect current relational state records. History is an append-only, immutable audit trail, not an event-sourced reconstruction mechanism ([ADR-014](docs/architecture/adr-014-execution-history-and-audit-model.md)).
-10. **Telemetry is Non-Authoritative and Fail-Open**: Telemetry exporter drops or collector outages never block or fail orchestration transactions ([ADR-016](docs/architecture/adr-016-observability.md)).
-11. **Trusted Worker Activity Execution**: In V1, worker activity code runs in a worker-local thread pool under an organizational trusted-code assumption; no process or container sandboxing is promised ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md), [ADR-022](docs/architecture/adr-022-security-architecture.md)).
-12. **Single Control-Plane Invariant ($N=1$)**: V1 enforces exactly one authoritative control-plane process to guarantee the integrity of the in-process Worker Registry and scheduler loops ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-023](docs/architecture/adr-023-configuration-architecture.md)).
+4. **Recovery as a First-Class Citizen**: System crashes are expected operational events. Control-plane startup reconciliation restores orchestration truth strictly from durable database snapshots without replaying history or reparsing YAML ([ADR-012](adr-012-recovery-strategy.md)).
+5. **Separation of Authentication from Orchestration Authority**: Identity verification (`Bearer` token) proves membership in a security domain; execution authority (`WorkerSessionId`, `AttemptId`, OCC revision) proves rights to mutate a specific attempt ([ADR-022](adr-022-security-architecture.md)).
+6. **Two-Phase Coordination (Candidate $\to$ Ownership)**: Offering work to a worker creates no attempt and consumes no retries. Authoritative ownership commits atomically in PostgreSQL before execution dispatch ([ADR-008](adr-008-worker-coordination-and-liveness-model.md)).
+7. **Transactional Atomicity Across Consistency Groups**: State transitions, authoritative outputs, and audit history entries commit all-or-nothing in single SQL transactions ([ADR-011](adr-011-state-persistence-strategy.md), [ADR-013](adr-013-consistency-and-concurrency-strategy.md)).
+8. **No Remote Network I/O Inside State Transactions**: Database transactions never block on worker HTTP requests, telemetry exports, or external services ([ADR-013](adr-013-consistency-and-concurrency-strategy.md)).
+9. **Current State is Authoritative; History is Audit**: Orchestration decisions inspect current relational state records. History is an append-only, immutable audit trail, not an event-sourced reconstruction mechanism ([ADR-014](adr-014-execution-history-and-audit-model.md)).
+10. **Telemetry is Non-Authoritative and Fail-Open**: Telemetry exporter drops or collector outages never block or fail orchestration transactions ([ADR-016](adr-016-observability-architecture.md)).
+11. **Trusted Worker Activity Execution**: In V1, worker activity code runs in a worker-local thread pool under an organizational trusted-code assumption; no process or container sandboxing is promised ([ADR-008](adr-008-worker-coordination-and-liveness-model.md), [ADR-022](adr-022-security-architecture.md)).
+12. **Single Control-Plane Invariant ($N=1$)**: V1 enforces exactly one authoritative control-plane process to guarantee the integrity of the in-process Worker Registry and scheduler loops ([ADR-019](adr-019-project-and-service-boundaries.md), [ADR-023](adr-023-configuration-architecture.md)).
 
 ---
 
@@ -56,18 +56,18 @@ The design of NexusFlow V1 is governed by twelve foundational engineering princi
 The following diagram illustrates NexusFlow V1 within its operational environment, distinguishing between **authoritative state boundaries** and **non-authoritative ephemeral/telemetry systems**:
 
 ```mermaid
-graph TD
-    Client[API Client / Operator / CI] -->|HTTP/HTTPS: Public REST API<br>[Authorization: Bearer Public Token]| CP[NexusFlow Control Plane<br>Single Process Modular Monolith]
-    Worker[Distributed Worker Processes<br>Python V1 Runtime] -->|HTTP/HTTPS: Worker Protocol<br>[Authorization: Bearer Worker Token]| CP
-    
-    subgraph Authoritative State Boundary
-        CP -->|TCP / TLS: SQLAlchemy 2.0 Async<br>asyncpg / READ COMMITTED + OCC| DB[(PostgreSQL 16 Database<br>Authoritative Relational Snapshot)]
+flowchart TD
+    Client["API Client / Operator / CI"] -->|"HTTP/HTTPS: Public REST API<br>(Authorization: Bearer Public Token)"| CP["NexusFlow Control Plane<br>(Single Process Modular Monolith)"]
+    Worker["Distributed Worker Processes<br>(Python V1 Runtime)"] -->|"HTTP/HTTPS: Worker Protocol<br>(Authorization: Bearer Worker Token)"| CP
+
+    subgraph AuthoritativeStateBoundary ["Authoritative State Boundary"]
+        CP -->|"TCP / TLS: SQLAlchemy 2.0 Async<br>asyncpg / READ COMMITTED + OCC"| DB[("PostgreSQL 16 Database<br>Authoritative Relational Snapshot")]
     end
-    
-    subgraph Non-Authoritative Telemetry Boundary
-        CP -.->|OTLP / gRPC: Non-Blocking Traces| Jaeger[Jaeger / Tracing Backend]
-        Prometheus[Prometheus Server] -.->|HTTP Scrape: /metrics| CP
-        Prometheus -.-> Grafana[Grafana Dashboards]
+
+    subgraph NonAuthoritativeBoundary ["Non-Authoritative Telemetry Boundary"]
+        CP -.->|"OTLP / gRPC: Non-Blocking Traces"| Jaeger["Jaeger / Tracing Backend"]
+        Prometheus["Prometheus Server"] -.->|"HTTP Scrape: /metrics"| CP
+        Prometheus -.-> Grafana["Grafana Dashboards"]
     end
 
     classDef auth fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
@@ -89,39 +89,37 @@ graph TD
 NexusFlow V1 deploys as a set of decoupled containers within a reference Docker Compose environment:
 
 ```mermaid
-graph TD
-    subgraph Host / External Network
-        IngressTraffic[External Traffic / API Requests]
+flowchart TD
+    subgraph HostNetwork ["Host / External Network"]
+        IngressTraffic["External Traffic / API Requests"]
     end
 
-    subgraph Docker Network: nexusflow-net
-        subgraph Control Plane Container
-            Uvicorn[Uvicorn ASGI Server<br>Workers = 1]
-            CP_App[NexusFlow Control Plane Core]
-            Uvicorn --> CP_App
-        end
-
-        subgraph Database Container
-            PG[(PostgreSQL 16 Engine<br>Port 5432 - Internal Only)]
-        end
-
-        subgraph Worker Containers [Distributed Worker Pool]
-            W1[Worker Process 1<br>Host A / Thread Pool]
-            W2[Worker Process 2<br>Host B / Thread Pool]
-        end
-
-        subgraph Observability Containers
-            JaegerNode[Jaeger All-In-One]
-            PromNode[Prometheus Engine]
-        end
+    subgraph ControlPlaneContainer ["Control Plane Container (nexusflow-net)"]
+        Uvicorn["Uvicorn ASGI Server<br>(Workers = 1)"]
+        CP_App["NexusFlow Control Plane Core"]
+        Uvicorn --> CP_App
     end
 
-    IngressTraffic -->|HTTP/HTTPS Port 8000| Uvicorn
-    CP_App -->|Internal Network| PG
-    W1 -->|Pull / Poll HTTP(S)| Uvicorn
-    W2 -->|Pull / Poll HTTP(S)| Uvicorn
-    CP_App -.->|OTLP :4317| JaegerNode
-    PromNode -.->|Scrape :8000/metrics| Uvicorn
+    subgraph DatabaseContainer ["Database Container (nexusflow-net)"]
+        PG[("PostgreSQL 16 Engine<br>Port 5432 - Internal Only")]
+    end
+
+    subgraph WorkerPool ["Distributed Worker Pool (nexusflow-net)"]
+        W1["Worker Process 1<br>(Host A / Thread Pool)"]
+        W2["Worker Process 2<br>(Host B / Thread Pool)"]
+    end
+
+    subgraph ObservabilityStack ["Observability Containers (nexusflow-net)"]
+        JaegerNode["Jaeger All-In-One"]
+        PromNode["Prometheus Engine"]
+    end
+
+    IngressTraffic -->|"HTTP/HTTPS Port 8000"| Uvicorn
+    CP_App -->|"Internal Network"| PG
+    W1 -->|"Pull / Poll HTTP(S)"| Uvicorn
+    W2 -->|"Pull / Poll HTTP(S)"| Uvicorn
+    CP_App -.->|"OTLP :4317"| JaegerNode
+    PromNode -.->|"Scrape :8000/metrics"| Uvicorn
 ```
 
 ### Deployment Invariants:
@@ -134,7 +132,7 @@ graph TD
 
 ## 6. Logical Architecture
 
-The control plane is organized as a **Modular Monolith** ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md)) following clean architectural layering:
+The control plane is organized as a **Modular Monolith** ([ADR-019](adr-019-project-and-service-boundaries.md)) following clean architectural layering:
 
 ```
 +─────────────────────────────────────────────────────────────────────────────────────+
@@ -201,7 +199,7 @@ The control plane is organized as a **Modular Monolith** ([ADR-019](docs/archite
 
 ## 8. Dependency Direction
 
-NexusFlow strictly enforces **inward dependency direction** per [ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md):
+NexusFlow strictly enforces **inward dependency direction** per [ADR-019](adr-019-project-and-service-boundaries.md):
 
 ```
 Interfaces / Frameworks (FastAPI, Uvicorn)
@@ -344,7 +342,7 @@ sequenceDiagram
 
 ## 11. Execution Lifecycle State Machines
 
-### 11.1 WorkflowExecution State Machine ([ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md))
+### 11.1 WorkflowExecution State Machine ([ADR-006](adr-006-workflow-execution-state-machine.md))
 
 ```mermaid
 stateDiagram-v2
@@ -352,14 +350,14 @@ stateDiagram-v2
     INITIALIZING --> RUNNING : Complete Task Set Established
     INITIALIZING --> FAILED : Irrecoverable Init Failure
     INITIALIZING --> CANCELLING : Cancel Requested
-    
+
     RUNNING --> FAILING : Definitive Task Failure
     RUNNING --> CANCELLING : Cancel Requested
     RUNNING --> SUCCEEDED : All Required Tasks Succeeded
-    
+
     FAILING --> FAILED : Complete Expected Task Set Terminal
     CANCELLING --> CANCELLED : Complete Expected Task Set Terminal
-    
+
     SUCCEEDED --> [*]
     FAILED --> [*]
     CANCELLED --> [*]
@@ -367,25 +365,25 @@ stateDiagram-v2
 
 *(Note: Cancellation of an `INITIALIZING` workflow transitions `INITIALIZING $\to$ CANCELLING $\to$ CANCELLED`; direct transition to `CANCELLED` is forbidden).*
 
-### 11.2 TaskExecution Lifecycle ([ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
+### 11.2 TaskExecution Lifecycle ([ADR-007](adr-007-task-execution-lifecycle-and-attempt-model.md))
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING : Execution Created
     PENDING --> RUNNABLE : Dependencies Succeeded & Inputs Resolved
     PENDING --> CANCELLED : Execution Cancelled / Failing
-    
+
     RUNNABLE --> RUNNING : Attempt Claim Committed
     RUNNABLE --> CANCELLED : Execution Cancelled / Failing
-    
+
     RUNNING --> SUCCEEDED : Authoritative Attempt Succeeded
     RUNNING --> RETRY_WAIT : Attempt Failed (Retryable & Budget > 0)
     RUNNING --> FAILED : Attempt Failed (Non-retryable or Budget Exhausted)
     RUNNING --> CANCELLED : Attempt Cancelled
-    
+
     RETRY_WAIT --> RUNNABLE : retry_ready_at Elapsed & Workflow RUNNING
     RETRY_WAIT --> CANCELLED : Execution Cancelled / Failing
-    
+
     SUCCEEDED --> [*]
     FAILED --> [*]
     CANCELLED --> [*]
@@ -393,7 +391,7 @@ stateDiagram-v2
 
 *(Note: States `BLOCKED` and `DISPATCHED` are strictly rejected).*
 
-### 11.3 ExecutionAttempt Lifecycle ([ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md))
+### 11.3 ExecutionAttempt Lifecycle ([ADR-007](adr-007-task-execution-lifecycle-and-attempt-model.md))
 
 ```mermaid
 stateDiagram-v2
@@ -401,11 +399,11 @@ stateDiagram-v2
     CLAIMED --> RUNNING : Execution Start Observed
     CLAIMED --> FAILED : Start Deadline Expired / Worker Lost
     CLAIMED --> CANCELLED : Cancel Acknowledged / Settled
-    
+
     RUNNING --> SUCCEEDED : Result Callback (Success)
     RUNNING --> FAILED : Result Callback (Failure) / Timeout / Worker Lost
     RUNNING --> CANCELLED : Cancel Acknowledged / Settled
-    
+
     SUCCEEDED --> [*]
     FAILED --> [*]
     CANCELLED --> [*]
@@ -436,7 +434,7 @@ The scheduling engine coordinates task readiness based on canonical graph topolo
 
 ## 13. Worker Coordination Architecture
 
-Worker coordination is governed by an **ephemeral in-process registry** combined with durable database attempt records ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)):
+Worker coordination is governed by an **ephemeral in-process registry** combined with durable database attempt records ([ADR-008](adr-008-worker-coordination-and-liveness-model.md)):
 
 ```mermaid
 sequenceDiagram
@@ -450,7 +448,7 @@ sequenceDiagram
     API->>API: Authenticate Worker Domain Token
     API->>Reg: RegisterSession(capabilities)
     Reg-->>Worker: HTTP 201 Created (WorkerSessionId, HeartbeatInterval=5s)
-    
+
     loop Every 5 Seconds
         Worker->>API: POST /worker/heartbeat (WorkerSessionId)<br>[Authorization: Bearer Worker Token]
         API->>Reg: RecordHeartbeat(WorkerSessionId)
@@ -467,7 +465,7 @@ sequenceDiagram
 
 ## 14. Routing Architecture
 
-Routing evaluates candidate compatibility per [ADR-009](docs/architecture/adr-009-task-routing.md):
+Routing evaluates candidate compatibility per [ADR-009](adr-009-task-routing-strategy.md):
 - **Candidate Evaluation**: When a worker issues a poll request, the Worker Poll use case queries the Routing/Scheduling coordinator. The coordinator inspects durable `RUNNABLE` tasks against active worker sessions.
 - **Eligibility Criteria**:
   1. Worker session is registered and currently **live** ($T_{\text{last\_heartbeat}} + L > \text{now}$).
@@ -483,7 +481,7 @@ Routing evaluates candidate compatibility per [ADR-009](docs/architecture/adr-00
 The transition from an ephemeral candidate offer to authoritative ownership is the central concurrency boundary in NexusFlow.
 
 > [!IMPORTANT]
-> In accordance with [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md), ownership commit uses **Durable Optimistic Single-Winner Concurrency (OCC)**. The transaction uses conditional semantic predicates and OCC revision checks. No global or table-wide pessimistic locks are required for correctness.
+> In accordance with [ADR-013](adr-013-consistency-and-concurrency-strategy.md), ownership commit uses **Durable Optimistic Single-Winner Concurrency (OCC)**. The transaction uses conditional semantic predicates and OCC revision checks. No global or table-wide pessimistic locks are required for correctness.
 
 ```mermaid
 sequenceDiagram
@@ -497,18 +495,18 @@ sequenceDiagram
     Worker->>API: POST /worker/tasks/{id}/claim (WorkerSessionId)<br>[Authorization: Bearer Worker Token]
     API->>API: Authenticate Worker Token
     API->>UseCase: execute(TaskExecutionId, WorkerSessionId)
-    
+
     UseCase->>Reg: ValidateSessionLiveness(WorkerSessionId)
     Reg-->>UseCase: Session Valid & Accepting Work
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Atomic Ownership Consistency Group (OCC Guarded)
         UseCase->>DB: Read current Task, Workflow, and Attempt state
         Note over UseCase: Verify Preconditions:<br>1. Workflow state == RUNNING<br>2. Task state == RUNNABLE<br>3. No active authoritative attempt exists<br>4. Worker session remains live
-        UseCase->>DB: Commit Conditional Ownership Mutation:<br>• UPDATE task_executions (RUNNABLE -> RUNNING, revision+1)<br>• INSERT execution_attempts (CLAIMED, WorkerSessionId, Ordinal, Deadline)<br>• INSERT history_entries (TaskClaimedByWorker)<br>WHERE task_execution_id = :id AND revision = :expected_revision
+        UseCase->>DB: Commit Conditional Ownership Mutation:<br>* UPDATE task_executions (RUNNABLE -> RUNNING, revision+1)<br>* INSERT execution_attempts (CLAIMED, WorkerSessionId, Ordinal, Deadline)<br>* INSERT history_entries (TaskClaimedByWorker)<br>WHERE task_execution_id = :id AND revision = :expected_revision
         DB-->>UseCase: Commit Successful (First Valid Commit Wins)
     end
-    
+
     UseCase-->>API: Attempt Claimed (AttemptId, Payload, StartDeadline)
     API-->>Worker: HTTP 200 OK (AttemptId, TaskInput, StartDeadline)
 ```
@@ -530,15 +528,15 @@ sequenceDiagram
     Worker->>API: POST /worker/attempts/{id}/start (WorkerSessionId)<br>[Authorization: Bearer Worker Token]
     API->>API: Authenticate Worker Token
     API->>UseCase: execute(AttemptId, WorkerSessionId)
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Atomic Execution Start Consistency Group (OCC Guarded)
         UseCase->>DB: Read current ExecutionAttempt
         Note over UseCase: Verify Preconditions:<br>1. attempt.state == CLAIMED<br>2. attempt.worker_session_id == WorkerSessionId<br>3. now_utc <= attempt.start_deadline_utc
-        UseCase->>DB: Commit Conditional Start Mutation:<br>• UPDATE execution_attempts (CLAIMED -> RUNNING, revision+1)<br>• INSERT history_entries (AttemptExecutionStarted)<br>WHERE attempt_id = :id AND revision = :expected_revision
+        UseCase->>DB: Commit Conditional Start Mutation:<br>* UPDATE execution_attempts (CLAIMED -> RUNNING, revision+1)<br>* INSERT history_entries (AttemptExecutionStarted)<br>WHERE attempt_id = :id AND revision = :expected_revision
         DB-->>UseCase: Commit Successful
     end
-    
+
     UseCase-->>API: Start Acknowledged
     API-->>Worker: HTTP 200 OK
 ```
@@ -562,15 +560,15 @@ sequenceDiagram
     API->>API: Authenticate Worker Token
     API->>UseCase: execute(AttemptId, WorkerSessionId, payload)
     UseCase->>UseCase: Validate JSON payload bounds
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Atomic Task Success Consistency Group (ADR-011 / ADR-013)
         UseCase->>DB: Read current Attempt, Task, and Workflow state
         Note over UseCase: Verify Preconditions:<br>1. attempt.state == RUNNING<br>2. attempt.worker_session_id == WorkerSessionId<br>3. task.state == RUNNING
-        UseCase->>DB: Commit Conditional Success Mutation:<br>• UPDATE execution_attempts (RUNNING -> SUCCEEDED, revision+1)<br>• UPDATE task_executions (RUNNING -> SUCCEEDED, has_output=true, output=:payload, revision+1)<br>• INSERT history_entries (TaskExecutionSucceeded)<br>WHERE ids match AND revisions match
+        UseCase->>DB: Commit Conditional Success Mutation:<br>* UPDATE execution_attempts (RUNNING -> SUCCEEDED, revision+1)<br>* UPDATE task_executions (RUNNING -> SUCCEEDED, has_output=true, output=:payload, revision+1)<br>* INSERT history_entries (TaskExecutionSucceeded)<br>WHERE ids match AND revisions match
         DB-->>UseCase: Commit Successful
     end
-    
+
     UseCase->>Sched: NotifyTaskCompletion(TaskExecutionId)
     UseCase-->>API: Acknowledged
     API-->>Worker: HTTP 200 OK
@@ -580,22 +578,22 @@ sequenceDiagram
 
 ## 18. Task Failure & Retry Architecture
 
-When an attempt fails, NexusFlow strictly separates **Task Failure Settlement** from **Workflow Failure Direction Arbitration** ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
+When an attempt fails, NexusFlow strictly separates **Task Failure Settlement** from **Workflow Failure Direction Arbitration** ([ADR-011](adr-011-state-persistence-strategy.md), [ADR-013](adr-013-consistency-and-concurrency-strategy.md)):
 
 ```mermaid
 flowchart TD
     AttemptFailed[ExecutionAttempt Fails] --> EvalRetry{Retryable Error<br>AND current_attempt < max_attempts<br>AND Workflow is RUNNING?}
-    
-    EvalRetry -- Yes --> CommitRetryWait["Group: Retry Scheduling (Atomic Commit)<br>• Attempt -> FAILED<br>• Task -> RETRY_WAIT<br>• Set retry_ready_at_utc = now + delay<br>• Append HistoryEntry"]
+
+    EvalRetry -- Yes --> CommitRetryWait["Group: Retry Scheduling (Atomic Commit)<br>* Attempt -> FAILED<br>* Task -> RETRY_WAIT<br>* Set retry_ready_at_utc = now + delay<br>* Append HistoryEntry"]
     CommitRetryWait --> AwaitTimer[Wait for retry_ready_at_utc]
     AwaitTimer --> MarkRunnable["Group: Retry Readiness (Atomic Commit)<br>Task -> RUNNABLE"]
-    
-    EvalRetry -- No --> CommitDefinitiveFailure["Group A: Definitive Task Failure (Atomic Commit)<br>• Attempt -> FAILED<br>• Task -> FAILED<br>• Materialize failure cause<br>• Append HistoryEntry"]
+
+    EvalRetry -- No --> CommitDefinitiveFailure["Group A: Definitive Task Failure (Atomic Commit)<br>* Attempt -> FAILED<br>* Task -> FAILED<br>* Materialize failure cause<br>* Append HistoryEntry"]
     CommitDefinitiveFailure --> ArbitrateWorkflow["Group B: Workflow Direction Arbitration (Guarded Race)<br>Workflow RUNNING -> FAILING under OCC"]
-    
+
     ArbitrateWorkflow -- FAILING Won --> CancelSiblings[Best-Effort Cancel Active Sibling Tasks]
     ArbitrateWorkflow -- CANCELLING Already Won --> DrainCancelled[Preserve CANCELLING Direction; Drain Active Tasks]
-    
+
     CancelSiblings --> SettleWorkflow[Wait for complete expected Task set to be Terminal]
     DrainCancelled --> SettleWorkflow
     SettleWorkflow --> CommitWorkflowTerminal["Workflow Terminal Settlement (Atomic Commit)<br>FAILING -> FAILED (or CANCELLING -> CANCELLED)"]
@@ -610,7 +608,7 @@ If a definitive task failure races against a user cancellation request, **the fi
 
 ## 19. Worker Loss Architecture
 
-Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)):
+Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](adr-008-worker-coordination-and-liveness-model.md)):
 1. **Detection**: Background liveness loop detects that a registered session has missed heartbeats beyond `liveness_timeout_seconds` ($T_{\text{last\_heartbeat}} + L < \text{now}$).
 2. **Session Eviction**: The session is marked evicted in the in-process registry; capability advertisements are withdrawn.
 3. **Attempt Settlement**:
@@ -623,7 +621,7 @@ Worker loss is an operational cause, not a domain lifecycle state ([ADR-008](doc
 
 ## 20. Workflow Cancellation Flow
 
-Cancellation requests transition workflow direction and settle task executions ([ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md)):
+Cancellation requests transition workflow direction and settle task executions ([ADR-006](adr-006-workflow-execution-state-machine.md)):
 
 ```mermaid
 sequenceDiagram
@@ -637,21 +635,21 @@ sequenceDiagram
     Client->>API: POST /executions/{id}/cancel<br>[Authorization: Bearer Public Token]
     API->>API: Authenticate Token (executions:cancel)
     API->>UseCase: execute(WorkflowExecutionId)
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Group: Workflow Cancellation Direction (OCC Guarded)
         UseCase->>DB: Conditional Transition:<br>Workflow RUNNING/INITIALIZING -> CANCELLING, revision+1<br>Append HistoryEntry
         DB-->>UseCase: Commit Successful (First Direction Wins)
     end
-    
+
     UseCase->>Sched: HaltNewWork()
     UseCase->>DB: Guarded Settle Unstarted Tasks -> CANCELLED (PENDING, RUNNABLE, RETRY_WAIT)
     UseCase->>Sched: DispatchCancellationNoticesToActiveWorkers()
     UseCase-->>API: Cancellation Accepted
     API-->>Client: HTTP 202 Accepted (State: CANCELLING)
-    
+
     Note over Sched,DB: Active Tasks Settle Idempotently (Success, Failure, or Cancelled)
-    
+
     rect rgb(235, 245, 255)
         Note over Sched,DB: Group: Terminal Cancellation Settlement
         Sched->>DB: Verify complete expected Task set is Terminal<br>Transition Workflow CANCELLING -> CANCELLED<br>Append HistoryEntry
@@ -685,7 +683,7 @@ A workflow transitions from `RUNNING` to `SUCCEEDED` if and only if:
 
 ## 23. Data Flow Architecture
 
-Data flow is strictly declarative and deterministic ([ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)):
+Data flow is strictly declarative and deterministic ([ADR-010](adr-010-workflow-data-flow-and-parameter-passing.md)):
 - **Named Input Map**: A task execution's logical input is structured as a named input map.
 - **Whole-Value Bindings**: Each named input binding resolves exactly one of:
   - `Literal`: Injects an immutable JSON-compatible value.
@@ -699,7 +697,7 @@ Data flow is strictly declarative and deterministic ([ADR-010](docs/architecture
 
 ## 24. Persistence Model & Consistency Groups
 
-Database mutations are partitioned into explicit, multi-entity transactional consistency groups ([ADR-011](docs/architecture/adr-011-state-persistence.md), [ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
+Database mutations are partitioned into explicit, multi-entity transactional consistency groups ([ADR-011](adr-011-state-persistence-strategy.md), [ADR-013](adr-013-consistency-and-concurrency-strategy.md)):
 
 | Consistency Group | Mutated Entities | Preconditions | History Event Category |
 | :--- | :--- | :--- | :--- |
@@ -720,7 +718,7 @@ Database mutations are partitioned into explicit, multi-entity transactional con
 
 ## 25. Concurrency & OCC Model
 
-NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on top of PostgreSQL `READ COMMITTED` transactions ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)):
+NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on top of PostgreSQL `READ COMMITTED` transactions ([ADR-013](adr-013-consistency-and-concurrency-strategy.md)):
 - Every mutable entity table (`workflow_executions`, `task_executions`, `execution_attempts`) includes an integer `revision` column.
 - Updates assert revision matching and semantic predicates:
   - If rows updated equals `0`, an OCC conflict occurred. The transaction aborts and rolls back.
@@ -732,7 +730,7 @@ NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on 
 
 ## 26. History & Audit Architecture
 
-- **Authoritative vs. Audit**: Current state tables are the sole source of truth for orchestration logic. The `history_entries` table is an append-only audit trail ([ADR-014](docs/architecture/adr-014-execution-history-and-audit-model.md)).
+- **Authoritative vs. Audit**: Current state tables are the sole source of truth for orchestration logic. The `history_entries` table is an append-only audit trail ([ADR-014](adr-014-execution-history-and-audit-model.md)).
 - **Atomicity**: A history entry is written in the exact same SQL transaction as the state mutation it records.
 - **No Event Sourcing**: History entries are never replayed to reconstruct state during crash recovery.
 - **Illustrative Semantic Categories**: Event names (`TaskMarkedRunnable`, `TaskClaimedByWorker`, `TaskExecutionSucceeded`, etc.) represent illustrative semantic categories; exact event naming schemas and payloads belong to History LLD.
@@ -742,20 +740,20 @@ NexusFlow V1 utilizes **Durable Optimistic Single-Winner Concurrency (OCC)** on 
 
 ## 27. Public API Architecture
 
-The public API is a RESTful HTTP/JSON interface implemented with FastAPI ([ADR-015](docs/architecture/adr-015-external-api-architecture.md)):
+The public API is a RESTful HTTP/JSON interface implemented with FastAPI ([ADR-015](adr-015-external-api-architecture.md)):
 - **Resource Families**:
   - `/definitions`: Workflow registration and inspection.
   - `/executions`: Workflow start, inspection, cancellation, and task listing.
   - `/executions/{id}/history`: Cursor-paginated execution history.
 - **Idempotent Starts**: Workflow start endpoints accept an optional `Idempotency-Key` header. Requests presenting an identical key and matching payload return the original execution resource; conflicting payloads return `HTTP 409 Conflict`.
 - **Start Execution Acknowledgement**: The API acknowledges execution creation as soon as the workflow is durably created. The returned authoritative state may be `INITIALIZING` or `RUNNING`; clients do not block waiting for task scheduling or worker assignment.
-- **Standard Error Envelopes**: All error responses adhere to normalized error structures ([ADR-018](docs/architecture/adr-018-error-handling-philosophy.md)), preventing stack traces, raw SQL queries, or database connection strings from leaking to clients.
+- **Standard Error Envelopes**: All error responses adhere to normalized error structures ([ADR-018](adr-018-error-handling-philosophy.md)), preventing stack traces, raw SQL queries, or database connection strings from leaking to clients.
 
 ---
 
 ## 28. Security Architecture
 
-NexusFlow V1 implements a defense-in-depth security model ([ADR-022](docs/architecture/adr-022-security-architecture.md)):
+NexusFlow V1 implements a defense-in-depth security model ([ADR-022](adr-022-security-architecture.md)):
 
 ```mermaid
 graph LR
@@ -792,7 +790,7 @@ graph LR
 
 ## 29. Observability Architecture
 
-Observability is decoupled from orchestration correctness ([ADR-016](docs/architecture/adr-016-observability.md)):
+Observability is decoupled from orchestration correctness ([ADR-016](adr-016-observability-architecture.md)):
 - **Structured Logging**: Emits machine-readable JSON logs to `stdout` containing correlation identifiers (`workflow_execution_id`, `task_execution_id`, `attempt_id`).
 - **Prometheus Metrics**: Exposes operational counters and histograms at `/metrics`. Metric labels are restricted to bounded, low-cardinality keys (e.g., `status`, or `activity_type` if bounded and cardinality-safe). Dynamic IDs and unbounded names are strictly forbidden as labels.
 - **OpenTelemetry Tracing**: Exporters operate asynchronously; exporter failures fail open without impacting transaction commits. Distributed trace context propagation across worker boundaries via W3C TraceContext is recommended as an implementation-level standard.
@@ -801,7 +799,7 @@ Observability is decoupled from orchestration correctness ([ADR-016](docs/archit
 
 ## 30. Configuration Architecture
 
-Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](docs/architecture/adr-023-configuration-architecture.md)):
+Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](adr-023-configuration-architecture.md)):
 - **Source Hierarchy**: Explicit Test Injection > Environment Variables (`NEXUSFLOW_*`) > Mounted Secret Files > Local `.env` > Code Defaults.
 - **Process Lifetime Immutability**: Settings are loaded, validated, and frozen at boot. Runtime hot-reloading is deferred.
 - **Fail-Closed Validation**: Missing required credentials, malformed URLs, or invalid cross-field bounds halt startup immediately.
@@ -811,7 +809,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](docs/a
 
 ## 31. Startup & Shutdown Lifecycles
 
-### 31.1 Startup Lifecycle ([ADR-020](docs/architecture/adr-020-technology-selection.md), [ADR-023](docs/architecture/adr-023-configuration-architecture.md))
+### 31.1 Startup Lifecycle ([ADR-020](adr-020-technology-selection.md), [ADR-023](adr-023-configuration-architecture.md))
 
 ```
 1. Load & Validate Configuration (Pydantic v2)
@@ -824,7 +822,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](docs/a
 8. Transition Health Endpoint to READY
 ```
 
-### 31.2 Graceful Shutdown Lifecycle ([ADR-017](docs/architecture/adr-017-graceful-shutdown-architecture.md))
+### 31.2 Graceful Shutdown Lifecycle ([ADR-017](adr-017-graceful-shutdown-architecture.md))
 
 ```
 1. Receive Termination Signal (e.g., SIGTERM / SIGINT)
@@ -841,7 +839,7 @@ Configuration is managed via Pydantic v2 / `pydantic-settings` ([ADR-023](docs/a
 
 ## 32. Recovery & Reconciliation Architecture
 
-Crash recovery relies exclusively on **current database state snapshots** ([ADR-012](docs/architecture/adr-012-recovery.md)):
+Crash recovery relies exclusively on **current database state snapshots** ([ADR-012](adr-012-recovery-strategy.md)):
 - **No History Replay**: Recovery never replays history entries or reparses YAML files.
 - **No Synthetic States**: The engine never transitions entities to artificial states like `RECOVERING`.
 - **Snapshot Scenarios**:
@@ -856,18 +854,18 @@ Crash recovery relies exclusively on **current database state snapshots** ([ADR-
 
 ## 33. Failure Handling Taxonomy
 
-Failure modes are classified into distinct architectural categories ([ADR-018](docs/architecture/adr-018-error-handling-philosophy.md)):
+Failure modes are classified into distinct architectural categories ([ADR-018](adr-018-error-handling-philosophy.md)):
 
 ```
                                 SYSTEM FAILURE TAXONOMY
-                                
+
    INGRESS / VALIDATION                           DOMAIN & EXECUTION
    ────────────────────                           ──────────────────
    • CLIENT_INPUT (Malformed JSON/Headers)        • DOMAIN_CONFLICT (Invalid state transition)
    • VALIDATION (Malformed DAG / cycle)           • DOMAIN_EXECUTION (Business task failure)
    • SECURITY (Invalid token / forbidden)         • TIME_BASED (Timeout / deadline expiry)
                                                   • WORKER_AVAILABILITY (Heartbeat loss)
-   
+
    INFRASTRUCTURE & SYSTEM                        TRANSACTIONAL CONCURRENCY
    ───────────────────────                        ─────────────────────────
    • SYSTEM_TRANSIENT (DB connection drop)        • CONCURRENCY (OCC revision conflict)
@@ -892,22 +890,22 @@ sequenceDiagram
     Client->>API: POST /executions (DefinitionId, Input)<br>[Authorization: Bearer Public Token, Idempotency-Key]
     API->>API: Authenticate Token (executions:start)
     API->>UseCase: execute(DefinitionId, Input, IdempotencyKey)
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Phase 1: Durable Workflow Creation (INITIALIZING)
         UseCase->>DB: Check IdempotencyKey; Read Validated IWS
-        UseCase->>DB: Commit Workflow Creation Consistency Group:<br>• INSERT workflow_executions (state='INITIALIZING', input=:input)<br>• Append HistoryEntry
+        UseCase->>DB: Commit Workflow Creation Consistency Group:<br>* INSERT workflow_executions (state='INITIALIZING', input=:input)<br>* Append HistoryEntry
         DB-->>UseCase: Commit Successful
     end
-    
+
     rect rgb(235, 245, 255)
         Note over UseCase,DB: Phase 2: Task Population & Completeness Verification
-        UseCase->>DB: Commit Task Population Consistency Group:<br>• INSERT task_executions (All declared tasks in PENDING state)
+        UseCase->>DB: Commit Task Population Consistency Group:<br>* INSERT task_executions (All declared tasks in PENDING state)
         DB-->>UseCase: Commit Successful
-        UseCase->>DB: Commit Initialization Completion Consistency Group:<br>• Verify complete expected task set exists<br>• UPDATE workflow_executions (INITIALIZING -> RUNNING, revision+1)<br>• Append HistoryEntry
+        UseCase->>DB: Commit Initialization Completion Consistency Group:<br>* Verify complete expected task set exists<br>* UPDATE workflow_executions (INITIALIZING -> RUNNING, revision+1)<br>* Append HistoryEntry
         DB-->>UseCase: Commit Successful
     end
-    
+
     UseCase->>Sched: EvaluateInitialReadiness(WorkflowExecutionId)
     UseCase-->>API: Execution Created (WorkflowExecutionId, State: RUNNING or INITIALIZING)
     API-->>Client: HTTP 201 Created (WorkflowExecutionId, State: RUNNING or INITIALIZING)
@@ -929,7 +927,7 @@ sequenceDiagram
     Boot->>Boot: Load & Validate Configuration
     Boot->>DB: Initialize asyncpg Connection Pool
     Boot->>Rec: ExecuteStartupReconciliation()
-    
+
     rect rgb(235, 245, 255)
         Note over Rec,DB: Authoritative Snapshot Recovery (ADR-012)
         Rec->>DB: Scan active WorkflowExecutions ('INITIALIZING', 'RUNNING', 'FAILING', 'CANCELLING')
@@ -940,7 +938,7 @@ sequenceDiagram
         Rec->>DB: Commit Reconciled Transitions & History Entries under OCC
         DB-->>Rec: Commit Successful
     end
-    
+
     Boot->>Sched: Launch Background Tasks (Scheduler, Liveness, Deadlines)
     Boot->>Boot: Mark Readiness Endpoint = READY
     Note over Boot: System Resumes Normal Ingress & Coordination

@@ -11,14 +11,14 @@ Furthermore, this record strictly defines the invariants governing data immutabi
 ## 2. Context
 
 NexusFlow orchestrates multi-task workflows structured as directed acyclic graphs. The preceding architectural decisions have established the foundational structural, execution, and coordination primitives:
-- [ADR-001](docs/architecture/adr-001-internal-workflow-specification.md) established the canonical Internal Workflow Specification (IWS), dictating that workflow definitions are normalized into validated, immutable internal schemas.
-- [ADR-003](docs/architecture/adr-003-canonical-workflow-graph-representation.md) established a single, canonical, immutable graph model where vertices represent tasks and directed edges represent explicit scheduling dependencies.
-- [ADR-004](docs/architecture/adr-004-workflow-validation-strategy.md) defined two-phase validation (pre-validation and deep static validation) for workflow definitions prior to ingestion.
-- [ADR-005](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md) established the dispatching model and success-only dependency satisfaction semantics, specifying that a task becomes eligible for dispatch (`RUNNABLE`) only after all upstream dependencies have successfully terminated.
-- [ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md) defined the root `WorkflowExecution` state machine, its lifecycle transitions, and its terminal success criteria.
-- [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled the logical `TaskExecution` lifecycle from the physical, ephemeral `ExecutionAttempt` lifecycle, dictating that a `TaskExecution` may undergo multiple retry attempts while maintaining a single logical task identity.
-- [ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness-model.md) defined worker coordination, worker incarnation tracking, execution start deadlines, and fencing mechanisms to guarantee single-winner result settlement.
-- [ADR-009](docs/architecture/adr-009-task-routing-strategy.md) established the two-stage routing pipeline (strict capability/liveness filtering followed by decoupled candidate selection) that dispatches runnable tasks to workers without altering payload semantics.
+- [ADR-001](adr-001-internal-workflow-specification.md) established the canonical Internal Workflow Specification (IWS), dictating that workflow definitions are normalized into validated, immutable internal schemas.
+- [ADR-003](adr-003-canonical-workflow-graph-representation.md) established a single, canonical, immutable graph model where vertices represent tasks and directed edges represent explicit scheduling dependencies.
+- [ADR-004](adr-004-workflow-validation-strategy.md) defined two-phase validation (pre-validation and deep static validation) for workflow definitions prior to ingestion.
+- [ADR-005](adr-005-workflow-task-scheduling-and-dispatch-architecture.md) established the dispatching model and success-only dependency satisfaction semantics, specifying that a task becomes eligible for dispatch (`RUNNABLE`) only after all upstream dependencies have successfully terminated.
+- [ADR-006](adr-006-workflow-execution-state-machine.md) defined the root `WorkflowExecution` state machine, its lifecycle transitions, and its terminal success criteria.
+- [ADR-007](adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled the logical `TaskExecution` lifecycle from the physical, ephemeral `ExecutionAttempt` lifecycle, dictating that a `TaskExecution` may undergo multiple retry attempts while maintaining a single logical task identity.
+- [ADR-008](adr-008-worker-coordination-and-liveness-model.md) defined worker coordination, worker incarnation tracking, execution start deadlines, and fencing mechanisms to guarantee single-winner result settlement.
+- [ADR-009](adr-009-task-routing-strategy.md) established the two-stage routing pipeline (strict capability/liveness filtering followed by decoupled candidate selection) that dispatches runnable tasks to workers without altering payload semantics.
 
 While ADR-003 established that directed edges govern scheduling order, an orchestration system requires a deterministic mechanism for passing data into tasks, transferring outputs between upstream and downstream tasks, and surfacing workflow completion results to external consumers. 
 
@@ -503,16 +503,16 @@ The following capabilities are explicitly deferred from V1 but may be evaluated 
 
 ## 25. References
 
-- [ADR-001: Internal Workflow Specification](docs/architecture/adr-001-internal-workflow-specification.md)
-- [ADR-002: Workflow Definition Parsing & Normalization](docs/architecture/adr-002-workflow-definition-parsing-strategy.md)
-- [ADR-003: Canonical Workflow Graph Representation](docs/architecture/adr-003-canonical-workflow-graph-representation.md)
-- [ADR-004: Workflow Validation Strategy](docs/architecture/adr-004-workflow-validation-strategy.md)
-- [ADR-005: Workflow Task Scheduling & Dispatch](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
-- [ADR-006: Workflow Execution State Machine](docs/architecture/adr-006-workflow-execution-state-machine.md)
-- [ADR-007: Task Execution Lifecycle & Attempt Model](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md)
-- [ADR-008: Worker Coordination & Liveness Model](docs/architecture/adr-008-worker-coordination-and-liveness-model.md)
-- [ADR-009: Task Routing Strategy](docs/architecture/adr-009-task-routing-strategy.md)
-- [Architecture Decision Register](docs/architecture/00-architecture-decision-register.md)
+- [ADR-001: Internal Workflow Specification](adr-001-internal-workflow-specification.md)
+- [ADR-002: Workflow Definition Parsing & Normalization](adr-002-workflow-definition-parsing-strategy.md)
+- [ADR-003: Canonical Workflow Graph Representation](adr-003-canonical-workflow-graph-representation.md)
+- [ADR-004: Workflow Validation Strategy](adr-004-workflow-validation-strategy.md)
+- [ADR-005: Workflow Task Scheduling & Dispatch](adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
+- [ADR-006: Workflow Execution State Machine](adr-006-workflow-execution-state-machine.md)
+- [ADR-007: Task Execution Lifecycle & Attempt Model](adr-007-task-execution-lifecycle-and-attempt-model.md)
+- [ADR-008: Worker Coordination & Liveness Model](adr-008-worker-coordination-and-liveness-model.md)
+- [ADR-009: Task Routing Strategy](adr-009-task-routing-strategy.md)
+- [Architecture Decision Register](00-architecture-decision-register.md)
 - RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format
 - RFC 6901: JavaScript Object Notation (JSON) Pointer
 

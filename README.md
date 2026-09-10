@@ -19,7 +19,7 @@ It executes DAG-based workflows across external workers while providing durable 
 Distributed orchestration systems often suffer from subtle race conditions, split-brain state between brokers and databases, or dual-write inconsistencies. NexusFlow was built to demonstrate rigorous distributed systems correctness:
 - Eliminating broker/database dual-write divergence by making PostgreSQL the single source of truth.
 - Enforcing state machine invariants with explicit Optimistic Concurrency Control (OCC).
-- Eliminating ghost executions with durable fencing and deterministic recovery without requiring event replay.
+- Fencing duplicate authoritative progression via durable ownership and OCC, with deterministic recovery without event replay.
 
 ### Genuine Implemented Capabilities
 
@@ -30,12 +30,11 @@ Distributed orchestration systems often suffer from subtle race conditions, spli
 | **Distributed External Workers** | HTTP worker protocol with long-polling (/internal/v1/worker/poll) |
 | **Durable Task / Attempt Ownership** | Atomic ownership commit (RUNNABLE -> RUNNING + attempt created as CLAIMED) |
 | **Worker Session Fencing** | Ephemeral WorkerSessionId validation prevents stale workers from reporting results |
-| **Retries & Retry Exhaustion** | Structured RETRY_WAIT state with exponential backoff and retry budget ceilings |
+| **Retries & Retry Exhaustion** | Structured RETRY_WAIT state with configured retry delay and retry budget ceilings |
 | **Timeouts & Worker Loss** | start_deadline_utc enforcement and worker heartbeat liveness monitors |
 | **Workflow Cancellation & Draining** | Directional row locks (SELECT ... FOR UPDATE) safely drain unstarted sibling tasks |
 | **PostgreSQL Crash Recovery** | Stateless StartupRecoveryEngine reconstructs and repairs state from current relational data |
-| **OCC Concurrency Protection** | Strict 
-evision = :expected_revision predicate prevents dirty writes |
+| **OCC Concurrency Protection** | Strict `revision = :expected_revision` predicate prevents dirty writes |
 | **Durable Audit Trail** | Append-only history_entries written in the exact same transaction as state mutations |
 | **Full Observability Stack** | Native Prometheus /metrics, OpenTelemetry distributed tracing, Grafana, and Jaeger |
 | **Docker Compose** | One-command orchestration bringing up Control Plane, PostgreSQL, Prometheus, Grafana, Jaeger |
@@ -45,7 +44,7 @@ evision = :expected_revision predicate prevents dirty writes |
 NexusFlow enforces strict engineering invariants:
 1. **PostgreSQL as the Sole Durable Authority:** No secondary brokers or queues (no Kafka, Redis, or Celery). State transitions and ownership commits are atomic database transactions.
 2. **Candidate / Offer != Ownership:** Tasks are offered to eligible workers concurrently; ownership commits **only** upon successful creation of an execution_attempts record.
-3. **Attempt Creation = Ownership Commit:** Atomically transitions 	ask_executions from RUNNABLE to RUNNING and inserts execution_attempts in CLAIMED state with the allocated ordinal.
+3. **Attempt Creation = Ownership Commit:** Atomically transitions `task_executions` from RUNNABLE to RUNNING and inserts execution_attempts in CLAIMED state with the allocated ordinal.
 4. **Expected State + Revision Predicates:** OCC updates enforce WHERE state = :expected_state AND revision = :expected_revision.
 5. **First Valid Durable Commit Wins:** Concurrent claim or transition races resolve deterministically; losers receive OCC_CONFLICT and safely back off.
 6. **History is an Audit Trail, Not Orchestration Authority:** Relational tables store authoritative active state; history is an immutable append-only record.
@@ -55,7 +54,7 @@ NexusFlow enforces strict engineering invariants:
 
 ## 2. System Architecture
 
-`mermaid
+```mermaid
 flowchart TD
     subgraph Clients[Client Ecosystem]
         direction TB
@@ -111,7 +110,7 @@ flowchart TD
 
 ## 3. Workflow Execution & Ownership Flow
 
-`mermaid
+```mermaid
 sequenceDiagram
     autonumber
     participant Client as Public API Client
@@ -156,7 +155,7 @@ sequenceDiagram
 ## 4. State Machines & Failure Handling
 
 ### Task Execution Lifecycle
-`mermaid
+```mermaid
 stateDiagram-v2
     [*] --> PENDING: Workflow Initialized
     PENDING --> RUNNABLE: Dependencies Succeeded
@@ -208,7 +207,7 @@ Local benchmark on an Intel Core i7-1165G7 @ 2.80GHz with PostgreSQL 16:
 
 ### 1. Start Docker Compose Stack
 Starts PostgreSQL 16, Control Plane, Prometheus, Grafana, and Jaeger:
-`ash
+```bash
 cp .env.example .env
 docker compose up -d --build
 `
@@ -216,17 +215,17 @@ docker compose up -d --build
 Service endpoints:
 - **NexusFlow API & OpenAPI Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Prometheus Metrics:** [http://localhost:9090](http://localhost:9090)
-- **Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (User: dmin, Pass: dmin)
+- **Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (User: admin, Pass: admin)
 - **Jaeger Tracing:** [http://localhost:16686](http://localhost:16686)
 
 ### 2. Run Database Migrations (Local Dev)
 If running outside of Docker:
-`ash
+```bash
 uv run alembic upgrade head
 `
 
 ### 3. Run Demonstration Suite (Scenarios A through E)
-`ash
+```bash
 uv run python examples/run_demos.py
 `
 Outputs live trace for:
@@ -237,12 +236,12 @@ Outputs live trace for:
 - **Scenario E:** Startup recovery & reconciliation demonstration.
 
 ### 4. Run Benchmark Suite
-`ash
+```bash
 uv run python benchmarks/benchmark_runner.py
 `
 
 ### 5. Run Verification Quality Gates
-`ash
+```bash
 # Automated Test Suite (Tested against PostgreSQL 16)
 uv run pytest -v
 
@@ -255,7 +254,7 @@ uv run ruff check .
 
 ## 7. Repository Structure
 
-`	ext
+```text
 src/nexusflow/
   definition/      # AST ingestion, DAG validation, and schema codec
   domain/          # Core domain models, state enums, and identifiers

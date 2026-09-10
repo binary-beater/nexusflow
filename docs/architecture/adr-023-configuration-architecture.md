@@ -8,7 +8,7 @@ This Architecture Decision Record (ADR) defines the configuration architecture, 
 
 ## 2. Context
 
-NexusFlow V1 is designed as a single-instance modular monolith control plane coordinating with distributed Python V1 workers over an HTTP/JSON pull/long-poll protocol ([ADR-019](docs/architecture/adr-019-project-and-service-boundaries.md), [ADR-020](docs/architecture/adr-020-technology-selection.md)). Orchestration correctness relies upon explicit lifecycle state machines ([ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md), [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-execution-attempt-model.md)), two-phase Candidate $\to$ Ownership coordination ([ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness.md)), transactional consistency groups ([ADR-011](docs/architecture/adr-011-state-persistence.md)), snapshot-based crash recovery ([ADR-012](docs/architecture/adr-012-recovery.md)), Optimistic Concurrency Control (OCC) guarded writes ([ADR-013](docs/architecture/adr-013-consistency-and-concurrency.md)), layered invariant testing ([ADR-021](docs/architecture/adr-021-testing-strategy.md)), and a pragmatic defense-in-depth security model ([ADR-022](docs/architecture/adr-022-security-architecture.md)).
+NexusFlow V1 is designed as a single-instance modular monolith control plane coordinating with distributed Python V1 workers over an HTTP/JSON pull/long-poll protocol ([ADR-019](adr-019-project-and-service-boundaries.md), [ADR-020](adr-020-technology-selection.md)). Orchestration correctness relies upon explicit lifecycle state machines ([ADR-006](adr-006-workflow-execution-state-machine.md), [ADR-007](adr-007-task-execution-lifecycle-and-execution-attempt-model.md)), two-phase Candidate $\to$ Ownership coordination ([ADR-008](adr-008-worker-coordination-and-liveness.md)), transactional consistency groups ([ADR-011](adr-011-state-persistence.md)), snapshot-based crash recovery ([ADR-012](adr-012-recovery.md)), Optimistic Concurrency Control (OCC) guarded writes ([ADR-013](adr-013-consistency-and-concurrency.md)), layered invariant testing ([ADR-021](adr-021-testing-strategy.md)), and a pragmatic defense-in-depth security model ([ADR-022](adr-022-security-architecture.md)).
 
 As the final V1 platform ADR, ADR-023 bridges the abstract architectural specifications into executable operational realities. A workflow engine operates under varying operational constraints (e.g., local developer environments, resource-constrained CI runners, high-throughput Docker Compose deployments). However, in distributed orchestration systems, improper configuration management introduces severe architectural risks:
 - Operational parameters may be conflated with semantic execution contracts, causing in-flight workflows to behave unpredictably across control-plane restarts.
@@ -56,10 +56,10 @@ while ensuring that:
 
 ## 5. Constraints
 
-- **Single Authoritative Process ($N=1$)**: NexusFlow V1 assumes an in-process ephemeral Worker Registry and local scheduler coordination. Configuration must not support multi-process control-plane execution before [ADR-025](docs/architecture/adr-025-high-availability-and-clustering.md).
+- **Single Authoritative Process ($N=1$)**: NexusFlow V1 assumes an in-process ephemeral Worker Registry and local scheduler coordination. Configuration must not support multi-process control-plane execution before [ADR-025](adr-025-high-availability-and-clustering.md).
 - **No External Distributed Config Store in V1**: Technologies such as Consul, etcd, ZooKeeper, or Redis-backed dynamic configuration are excluded.
 - **Python 3.12 & Pydantic v2**: Configuration must leverage `pydantic-settings` natively within Python 3.12 without introducing secondary configuration parsers.
-- **No IWS Schema Expansion**: ADR-023 must not invent new public workflow-definition schema fields (e.g., public task retry-delay backoff specifications) that were not established in [ADR-001](docs/architecture/adr-001-internal-workflow-specification.md) or [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-execution-attempt-model.md).
+- **No IWS Schema Expansion**: ADR-023 must not invent new public workflow-definition schema fields (e.g., public task retry-delay backoff specifications) that were not established in [ADR-001](adr-001-internal-workflow-specification.md) or [ADR-007](adr-007-task-execution-lifecycle-and-execution-attempt-model.md).
 
 ---
 
@@ -77,7 +77,7 @@ while ensuring that:
 ## 7. Non-Goals
 
 - **No Dynamic Runtime Hot Reloading**: Configuration cannot be modified on a running process without a process restart.
-- **No Distributed Configuration Synchronization**: Multi-node configuration propagation is deferred to [ADR-025](docs/architecture/adr-025-high-availability-and-clustering.md).
+- **No Distributed Configuration Synchronization**: Multi-node configuration propagation is deferred to [ADR-025](adr-025-high-availability-and-clustering.md).
 - **No Dynamic Feature Flag Platform**: Configuration does not provide a runtime feature-toggling or A/B testing framework.
 - **No Application-Level Orchestration Quotas**: Distributed task concurrency caps and rate-limiting scheduling queues remain deferred.
 - **No External Configuration CLI**: NexusFlow does not provide an independent administrative configuration CLI tool in V1.
@@ -135,7 +135,7 @@ NexusFlow V1 adopts a **Typed, Validated, Immutable-at-Startup Configuration Arc
    - **Deployment / Secret Inputs**: Environment credentials injected via protected environment variables or mounted secret files; no hardcoded defaults.
 3. **Immutable Process Snapshot**: Configuration is validated and loaded into a frozen snapshot during process startup. Dynamic runtime hot-reloading is deferred.
 4. **Fail-Closed Startup Validation**: Missing required fields, malformed types, negative intervals, cross-field inconsistencies, or credential domain overlaps immediately halt process startup with a non-zero exit code and sanitized diagnostics. The service never enters a ready state with invalid configuration.
-5. **Single Control-Plane Invariant Enforced ($N=1$)**: Server configuration prohibits local multi-process execution (e.g., Uvicorn `--workers > 1` or Gunicorn master-worker topologies). Multi-container replica deployment is prohibited as an operational constraint until [ADR-025](docs/architecture/adr-025-high-availability-and-clustering.md).
+5. **Single Control-Plane Invariant Enforced ($N=1$)**: Server configuration prohibits local multi-process execution (e.g., Uvicorn `--workers > 1` or Gunicorn master-worker topologies). Multi-container replica deployment is prohibited as an operational constraint until [ADR-025](adr-025-high-availability-and-clustering.md).
 6. **Task vs. Engine Retry Separation**: Business task retries (which consume attempt budgets and transition to `RETRY_WAIT`) are strictly separated from internal engine operational retries (which handle transient DB drops or OCC revision conflicts without consuming attempt budgets).
 
 ---
@@ -212,7 +212,7 @@ NexusFlow V1 relies upon an in-process ephemeral Worker Registry and local sched
 
 ## 16. Testing
 
-Per [ADR-021](docs/architecture/adr-021-testing-strategy.md), configuration architecture is verified directly within test harnesses:
+Per [ADR-021](adr-021-testing-strategy.md), configuration architecture is verified directly within test harnesses:
 
 ```
 tests/
@@ -308,27 +308,27 @@ In systems engineering interviews, NexusFlow's configuration architecture illust
 
 ## 25. References
 
-- [ADR-001: Internal Workflow Specification (IWS)](docs/architecture/adr-001-internal-workflow-specification.md)
-- [ADR-003: Canonical Workflow Graph Representation](docs/architecture/adr-003-canonical-workflow-graph.md)
-- [ADR-004: Workflow Validation Strategy](docs/architecture/adr-004-semantic-validation.md)
-- [ADR-005: Workflow Task Scheduling & Dispatch Architecture](docs/architecture/adr-005-task-scheduling-and-eligibility.md)
-- [ADR-006: Workflow Execution State Machine](docs/architecture/adr-006-workflow-execution-state-machine.md)
-- [ADR-007: Task Execution Lifecycle & Attempt Model](docs/architecture/adr-007-task-execution-lifecycle-and-execution-attempt-model.md)
-- [ADR-008: Worker Coordination & Liveness Model](docs/architecture/adr-008-worker-coordination-and-liveness.md)
-- [ADR-009: Task Routing Strategy](docs/architecture/adr-009-task-routing.md)
-- [ADR-010: Workflow Data Flow & Parameter Passing](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
-- [ADR-011: State Persistence Strategy](docs/architecture/adr-011-state-persistence.md)
-- [ADR-012: Recovery Strategy](docs/architecture/adr-012-recovery.md)
-- [ADR-013: Consistency & Concurrency Strategy](docs/architecture/adr-013-consistency-and-concurrency.md)
-- [ADR-014: Execution History & Audit Model](docs/architecture/adr-014-execution-history-and-audit-model.md)
-- [ADR-015: External API Architecture](docs/architecture/adr-015-external-api-architecture.md)
-- [ADR-016: Observability Architecture](docs/architecture/adr-016-observability.md)
-- [ADR-017: Graceful Shutdown Strategy](docs/architecture/adr-017-graceful-shutdown-architecture.md)
-- [ADR-018: Error Handling Philosophy](docs/architecture/adr-018-error-handling-philosophy.md)
-- [ADR-019: Project Modularity & Service Boundaries](docs/architecture/adr-019-project-and-service-boundaries.md)
-- [ADR-020: Technology Selection Strategy](docs/architecture/adr-020-technology-selection.md)
-- [ADR-021: Testing Strategy](docs/architecture/adr-021-testing-strategy.md)
-- [ADR-022: Security Architecture](docs/architecture/adr-022-security-architecture.md)
+- [ADR-001: Internal Workflow Specification (IWS)](adr-001-internal-workflow-specification.md)
+- [ADR-003: Canonical Workflow Graph Representation](adr-003-canonical-workflow-graph.md)
+- [ADR-004: Workflow Validation Strategy](adr-004-semantic-validation.md)
+- [ADR-005: Workflow Task Scheduling & Dispatch Architecture](adr-005-task-scheduling-and-eligibility.md)
+- [ADR-006: Workflow Execution State Machine](adr-006-workflow-execution-state-machine.md)
+- [ADR-007: Task Execution Lifecycle & Attempt Model](adr-007-task-execution-lifecycle-and-execution-attempt-model.md)
+- [ADR-008: Worker Coordination & Liveness Model](adr-008-worker-coordination-and-liveness.md)
+- [ADR-009: Task Routing Strategy](adr-009-task-routing.md)
+- [ADR-010: Workflow Data Flow & Parameter Passing](adr-010-workflow-data-flow-and-parameter-passing.md)
+- [ADR-011: State Persistence Strategy](adr-011-state-persistence.md)
+- [ADR-012: Recovery Strategy](adr-012-recovery.md)
+- [ADR-013: Consistency & Concurrency Strategy](adr-013-consistency-and-concurrency.md)
+- [ADR-014: Execution History & Audit Model](adr-014-execution-history-and-audit-model.md)
+- [ADR-015: External API Architecture](adr-015-external-api-architecture.md)
+- [ADR-016: Observability Architecture](adr-016-observability.md)
+- [ADR-017: Graceful Shutdown Strategy](adr-017-graceful-shutdown-architecture.md)
+- [ADR-018: Error Handling Philosophy](adr-018-error-handling-philosophy.md)
+- [ADR-019: Project Modularity & Service Boundaries](adr-019-project-and-service-boundaries.md)
+- [ADR-020: Technology Selection Strategy](adr-020-technology-selection.md)
+- [ADR-021: Testing Strategy](adr-021-testing-strategy.md)
+- [ADR-022: Security Architecture](adr-022-security-architecture.md)
 - Pydantic Settings Documentation: https://docs.pydantic.dev/latest/concepts/pydantic_settings/
 
 ---

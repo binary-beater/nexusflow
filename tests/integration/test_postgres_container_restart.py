@@ -118,7 +118,17 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
         assert len(history_pre) >= 8
 
         # 5. RESTART DOCKER POSTGRES CONTAINER
-        docker_exe = r"C:\Users\KIIT\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+        import shutil
+        docker_candidates = [
+            shutil.which("docker"),
+            os.path.expanduser(r"~\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"),
+            r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+            r"C:\Program Files\Docker\Docker\docker.exe",
+            r"C:\ProgramData\DockerDesktop\version-bin\docker.exe",
+            "/usr/bin/docker",
+            "/usr/local/bin/docker",
+        ]
+        docker_exe = next((c for c in docker_candidates if c and os.path.exists(c)), "docker")
         subprocess.run([docker_exe, "restart", "nexusflow-postgres"], check=True)
 
         # Wait for pg_isready

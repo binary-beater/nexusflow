@@ -11,14 +11,14 @@ Furthermore, this record formalizes the structural distinction between authorita
 ## 2. Context
 
 NexusFlow orchestrates distributed multi-task workflows structured as directed acyclic graphs. The preceding architectural decisions have established the foundations of specification, execution, coordination, and data flow:
-- [ADR-001](docs/architecture/adr-001-internal-workflow-specification.md) & [ADR-002](docs/architecture/adr-002-workflow-definition-parsing-strategy.md) established the canonical Internal Workflow Specification (Validated IWS) and dictated that runtime execution and recovery must never re-parse source authoring YAML.
-- [ADR-003](docs/architecture/adr-003-canonical-workflow-graph-representation.md) & [ADR-004](docs/architecture/adr-004-workflow-validation-strategy.md) defined the immutable canonical DAG representation and deep two-phase validation.
-- [ADR-005](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md) established success-only dependency satisfaction and task dispatch eligibility.
-- [ADR-006](docs/architecture/adr-006-workflow-execution-state-machine.md) defined the root `WorkflowExecution` state machine (`INITIALIZING`, `RUNNING`, `CANCELLING`, `FAILING`, `SUCCEEDED`, `FAILED`, `CANCELLED`).
-- [ADR-007](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled the logical `TaskExecution` lifecycle from the physical, ephemeral `ExecutionAttempt` lifecycle, dictating monotonic attempt ordinals and strict retry isolation.
-- [ADR-008](docs/architecture/adr-008-worker-coordination-and-liveness-model.md) defined worker session ownership, worker incarnation tracking, execution-start deadlines, cancellation-resolution deadlines, and result fencing.
-- [ADR-009](docs/architecture/adr-009-task-routing-strategy.md) established two-stage routing where routing decisions are non-authoritative and decoupled from attempt creation.
-- [ADR-010](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md) established the JSON-compatible logical value model, whole-value input bindings, stable logical task inputs, authoritative output immutability, and atomic visibility of terminal success states with their outputs.
+- [ADR-001](adr-001-internal-workflow-specification.md) & [ADR-002](adr-002-workflow-definition-parsing-strategy.md) established the canonical Internal Workflow Specification (Validated IWS) and dictated that runtime execution and recovery must never re-parse source authoring YAML.
+- [ADR-003](adr-003-canonical-workflow-graph-representation.md) & [ADR-004](adr-004-workflow-validation-strategy.md) defined the immutable canonical DAG representation and deep two-phase validation.
+- [ADR-005](adr-005-workflow-task-scheduling-and-dispatch-architecture.md) established success-only dependency satisfaction and task dispatch eligibility.
+- [ADR-006](adr-006-workflow-execution-state-machine.md) defined the root `WorkflowExecution` state machine (`INITIALIZING`, `RUNNING`, `CANCELLING`, `FAILING`, `SUCCEEDED`, `FAILED`, `CANCELLED`).
+- [ADR-007](adr-007-task-execution-lifecycle-and-attempt-model.md) decoupled the logical `TaskExecution` lifecycle from the physical, ephemeral `ExecutionAttempt` lifecycle, dictating monotonic attempt ordinals and strict retry isolation.
+- [ADR-008](adr-008-worker-coordination-and-liveness-model.md) defined worker session ownership, worker incarnation tracking, execution-start deadlines, cancellation-resolution deadlines, and result fencing.
+- [ADR-009](adr-009-task-routing-strategy.md) established two-stage routing where routing decisions are non-authoritative and decoupled from attempt creation.
+- [ADR-010](adr-010-workflow-data-flow-and-parameter-passing.md) established the JSON-compatible logical value model, whole-value input bindings, stable logical task inputs, authoritative output immutability, and atomic visibility of terminal success states with their outputs.
 
 While upstream ADRs define how state machines transition and how data flows, an orchestration engine requires a concrete strategy for persisting this state durably. Without a disciplined persistence architecture, systems suffer from split-brain execution, corrupted state machines caused by partial writes, lost work during restarts, unrecoverable worker sessions, and blurred boundaries between volatile caches and durable truth. ADR-011 formalizes the persistence model that underpins NexusFlow's durability guarantees.
 
@@ -620,17 +620,17 @@ The persistence strategy requires comprehensive verification across integration 
 
 ## 25. References
 
-- [ADR-001: Internal Workflow Specification](docs/architecture/adr-001-internal-workflow-specification.md)
-- [ADR-002: Workflow Definition Parsing & Normalization](docs/architecture/adr-002-workflow-definition-parsing-strategy.md)
-- [ADR-003: Canonical Workflow Graph Representation](docs/architecture/adr-003-canonical-workflow-graph-representation.md)
-- [ADR-004: Workflow Validation Strategy](docs/architecture/adr-004-workflow-validation-strategy.md)
-- [ADR-005: Workflow Task Scheduling & Dispatch](docs/architecture/adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
-- [ADR-006: Workflow Execution State Machine](docs/architecture/adr-006-workflow-execution-state-machine.md)
-- [ADR-007: Task Execution Lifecycle & Attempt Model](docs/architecture/adr-007-task-execution-lifecycle-and-attempt-model.md)
-- [ADR-008: Worker Coordination & Liveness Model](docs/architecture/adr-008-worker-coordination-and-liveness-model.md)
-- [ADR-009: Task Routing Strategy](docs/architecture/adr-009-task-routing-strategy.md)
-- [ADR-010: Workflow Data Flow & Parameter Passing](docs/architecture/adr-010-workflow-data-flow-and-parameter-passing.md)
-- [Architecture Decision Register](docs/architecture/00-architecture-decision-register.md)
+- [ADR-001: Internal Workflow Specification](adr-001-internal-workflow-specification.md)
+- [ADR-002: Workflow Definition Parsing & Normalization](adr-002-workflow-definition-parsing-strategy.md)
+- [ADR-003: Canonical Workflow Graph Representation](adr-003-canonical-workflow-graph-representation.md)
+- [ADR-004: Workflow Validation Strategy](adr-004-workflow-validation-strategy.md)
+- [ADR-005: Workflow Task Scheduling & Dispatch](adr-005-workflow-task-scheduling-and-dispatch-architecture.md)
+- [ADR-006: Workflow Execution State Machine](adr-006-workflow-execution-state-machine.md)
+- [ADR-007: Task Execution Lifecycle & Attempt Model](adr-007-task-execution-lifecycle-and-attempt-model.md)
+- [ADR-008: Worker Coordination & Liveness Model](adr-008-worker-coordination-and-liveness-model.md)
+- [ADR-009: Task Routing Strategy](adr-009-task-routing-strategy.md)
+- [ADR-010: Workflow Data Flow & Parameter Passing](adr-010-workflow-data-flow-and-parameter-passing.md)
+- [Architecture Decision Register](00-architecture-decision-register.md)
 
 ---
 
