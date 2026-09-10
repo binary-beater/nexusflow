@@ -103,7 +103,9 @@ class WorkerRegistry:
             rec = self._sessions.get(session_id.value)
             if rec is None:
                 return None
-            is_live = (now_monotonic - rec.last_heartbeat_monotonic) <= self._liveness_timeout_seconds
+            is_live = (
+                now_monotonic - rec.last_heartbeat_monotonic
+            ) <= self._liveness_timeout_seconds
             return WorkerSessionSnapshot(
                 session_id=rec.session_id,
                 worker_id=rec.worker_id,
@@ -121,7 +123,9 @@ class WorkerRegistry:
         now_monotonic = time.monotonic()
         async with self._lock:
             for rec in self._sessions.values():
-                is_live = (now_monotonic - rec.last_heartbeat_monotonic) <= self._liveness_timeout_seconds
+                is_live = (
+                    now_monotonic - rec.last_heartbeat_monotonic
+                ) <= self._liveness_timeout_seconds
                 if is_live and rec.accepting_new_work and (activity_type in rec.capabilities):
                     return WorkerSessionSnapshot(
                         session_id=rec.session_id,
@@ -165,4 +169,3 @@ class WorkerRegistry:
                 if (now_monotonic - rec.last_heartbeat_monotonic) > self._liveness_timeout_seconds:
                     lost.append(rec.session_id)
         return lost
-

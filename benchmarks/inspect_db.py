@@ -19,10 +19,15 @@ async def main():
         print(f"Total tasks: {len(tasks)}")
         for t in tasks:
             wf = await session.get(WorkflowExecutionRecord, t.workflow_execution_id)
-            print(f"Task {t.task_definition_id}, state={t.state}, wf_id={t.workflow_execution_id}, wf_state={wf.state if wf else None}, wf_def_id={wf.definition_id if wf else None}")
+            print(
+                f"Task {t.task_definition_id}, state={t.state}, wf_id={t.workflow_execution_id}, wf_state={wf.state if wf else None}, wf_def_id={wf.definition_id if wf else None}"
+            )
             if wf:
                 defn = await session.get(RegisteredDefinitionRecord, wf.definition_id)
-                print(f"  Defn {defn.definition_id if defn else None}: {defn.workflow_name if defn else None}, tasks={list(defn.validated_iws.get('tasks', {}).keys()) if defn else None}")
+                print(
+                    f"  Defn {defn.definition_id if defn else None}: {defn.workflow_name if defn else None}, tasks={list(defn.validated_iws.get('tasks', {}).keys()) if defn else None}"
+                )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

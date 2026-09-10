@@ -48,10 +48,14 @@ def enforce_yaml_ast_complexity(
         # In V1: Reject all anchors and aliases to eliminate expansion vulnerabilities
         if not allow_aliases:
             if getattr(current_node, "anchor", None) is not None:
-                raise YamlComplexityError("YAML anchors and aliases are prohibited in workflow definitions.")
+                raise YamlComplexityError(
+                    "YAML anchors and aliases are prohibited in workflow definitions."
+                )
             node_type_name = type(current_node).__name__
             if "Alias" in node_type_name or getattr(current_node, "is_alias", False):
-                raise YamlComplexityError("YAML anchors and aliases are prohibited in workflow definitions.")
+                raise YamlComplexityError(
+                    "YAML anchors and aliases are prohibited in workflow definitions."
+                )
 
         if isinstance(current_node, MappingNode):
             for key_node, value_node in current_node.value:
@@ -81,7 +85,9 @@ def parse_yaml_to_ast(
     """
     raw_bytes = yaml_text.encode("utf-8")
     if len(raw_bytes) > max_bytes:
-        raise YamlComplexityError(f"YAML payload size ({len(raw_bytes)} bytes) exceeds limit of {max_bytes} bytes.")
+        raise YamlComplexityError(
+            f"YAML payload size ({len(raw_bytes)} bytes) exceeds limit of {max_bytes} bytes."
+        )
 
     parser = create_safe_yaml_parser()
 
@@ -94,9 +100,13 @@ def parse_yaml_to_ast(
         raise YamlSyntaxError("YAML document is empty or contains no content.")
 
     if not isinstance(composed_node, MappingNode):
-        raise YamlSyntaxError(f"Root YAML element must be a mapping/object, got {type(composed_node).__name__}.")
+        raise YamlSyntaxError(
+            f"Root YAML element must be a mapping/object, got {type(composed_node).__name__}."
+        )
 
-    enforce_yaml_ast_complexity(composed_node, max_depth=max_depth, max_nodes=max_nodes, allow_aliases=False)
+    enforce_yaml_ast_complexity(
+        composed_node, max_depth=max_depth, max_nodes=max_nodes, allow_aliases=False
+    )
 
     try:
         parsed_data = parser.load(yaml_text)
@@ -104,6 +114,8 @@ def parse_yaml_to_ast(
         raise YamlSyntaxError(f"Failed to load YAML: {exc}") from exc
 
     if not isinstance(parsed_data, dict):
-        raise YamlSyntaxError(f"Root YAML element must be a dictionary, got {type(parsed_data).__name__}.")
+        raise YamlSyntaxError(
+            f"Root YAML element must be a dictionary, got {type(parsed_data).__name__}."
+        )
 
     return parsed_data

@@ -434,9 +434,10 @@ from types import MappingProxyType
 from typing import Any
 import math
 
+
 def thaw_json(val: Any) -> Any:
     """Recursively converts frozen domain JSON into mutable dict/list for DB serialization.
-    
+
     Fails closed: strictly rejects non-string keys and non-finite floats (NaN/Infinity).
     Never converts non-string keys to strings via str(k).
     """
@@ -565,7 +566,7 @@ async def commit_registered_definition(
     raw_yaml: str | None,
     idempotency_key: IdempotencyKey | None,
     fingerprint: RequestFingerprint | None,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> tuple[CommitOutcome, DefinitionId]:
     async with session.begin():
         if idempotency_key is not None:
@@ -579,7 +580,7 @@ async def commit_registered_definition(
                     idempotency_key=idempotency_key.value,
                     request_fingerprint=fingerprint.digest,
                     resource_id=definition_id.value,
-                    created_at_utc=now_utc
+                    created_at_utc=now_utc,
                 )
                 .on_conflict_do_nothing(index_elements=["operation_type", "idempotency_key"])
             )
@@ -589,21 +590,27 @@ async def commit_registered_definition(
                 existing = await session.scalar(
                     select(IdempotencyRecord).where(
                         IdempotencyRecord.operation_type == "REGISTER_DEFINITION",
-                        IdempotencyRecord.idempotency_key == idempotency_key.value
+                        IdempotencyRecord.idempotency_key == idempotency_key.value,
                     )
                 )
                 if existing.request_fingerprint == fingerprint.digest:
-                    return CommitOutcome(status=CommitStatus.COMMITTED, message="Idempotent match"), DefinitionId(existing.resource_id)
-                return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Conflicting idempotency key"), definition_id
+                    return CommitOutcome(
+                        status=CommitStatus.COMMITTED, message="Idempotent match"
+                    ), DefinitionId(existing.resource_id)
+                return CommitOutcome(
+                    status=CommitStatus.PRECONDITION_FAILED, message="Conflicting idempotency key"
+                ), definition_id
 
         # Insert immutable definition row
-        session.add(RegisteredDefinitionRecord(
-            definition_id=definition_id.value,
-            workflow_name=workflow_name,
-            validated_iws=thaw_json(spec.to_dict()),
-            raw_yaml=raw_yaml,
-            created_at_utc=now_utc
-        ))
+        session.add(
+            RegisteredDefinitionRecord(
+                definition_id=definition_id.value,
+                workflow_name=workflow_name,
+                validated_iws=thaw_json(spec.to_dict()),
+                raw_yaml=raw_yaml,
+                created_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED), definition_id
 ```
@@ -619,7 +626,7 @@ async def commit_workflow_creation(
     execution: WorkflowExecution,
     idempotency_key: IdempotencyKey | None,
     fingerprint: RequestFingerprint | None,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> tuple[CommitOutcome, WorkflowExecutionId]:
     async with session.begin():
         if idempotency_key is not None:
@@ -634,7 +641,7 @@ async def commit_workflow_creation(
                     idempotency_key=idempotency_key.value,
                     request_fingerprint=fingerprint.digest,
                     resource_id=execution.id.value,
-                    created_at_utc=now_utc
+                    created_at_utc=now_utc,
                 )
                 .on_conflict_do_nothing(index_elements=["operation_type", "idempotency_key"])
             )
@@ -644,34 +651,42 @@ async def commit_workflow_creation(
                 existing = await session.scalar(
                     select(IdempotencyRecord).where(
                         IdempotencyRecord.operation_type == "START_EXECUTION",
-                        IdempotencyRecord.idempotency_key == idempotency_key.value
+                        IdempotencyRecord.idempotency_key == idempotency_key.value,
                     )
                 )
                 if existing.request_fingerprint == fingerprint.digest:
-                    return CommitOutcome(status=CommitStatus.COMMITTED, message="Idempotent match"), WorkflowExecutionId(existing.resource_id)
-                return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Conflicting idempotency key"), execution.id
+                    return CommitOutcome(
+                        status=CommitStatus.COMMITTED, message="Idempotent match"
+                    ), WorkflowExecutionId(existing.resource_id)
+                return CommitOutcome(
+                    status=CommitStatus.PRECONDITION_FAILED, message="Conflicting idempotency key"
+                ), execution.id
 
         # Insert WorkflowExecution in INITIALIZING state
-        session.add(WorkflowExecutionRecord(
-            workflow_execution_id=execution.id.value,
-            definition_id=execution.definition_id.value,
-            state="INITIALIZING",
-            revision=1,
-            workflow_input=thaw_json(execution.workflow_input),
-            has_output=False,
-            workflow_output=None,
-            created_at_utc=now_utc,
-            updated_at_utc=now_utc
-        ))
+        session.add(
+            WorkflowExecutionRecord(
+                workflow_execution_id=execution.id.value,
+                definition_id=execution.definition_id.value,
+                state="INITIALIZING",
+                revision=1,
+                workflow_input=thaw_json(execution.workflow_input),
+                has_output=False,
+                workflow_output=None,
+                created_at_utc=now_utc,
+                updated_at_utc=now_utc,
+            )
+        )
 
         # Insert Summarized History Entry
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=execution.id.value,
-            event_category="WorkflowExecutionCreated",
-            event_payload={"definition_id": str(execution.definition_id.value)},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=execution.id.value,
+                event_category="WorkflowExecutionCreated",
+                event_payload={"definition_id": str(execution.definition_id.value)},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED), execution.id
 ```
@@ -686,7 +701,7 @@ async def commit_task_population(
     session: AsyncSession,
     workflow_id: WorkflowExecutionId,
     tasks: Sequence[TaskExecution],
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Lock workflow row to serialize against cancellation direction
@@ -698,37 +713,45 @@ async def commit_task_population(
         wf_state = wf.scalar_one_or_none()
         if wf_state != "INITIALIZING":
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not INITIALIZING")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not INITIALIZING"
+            )
 
         # Idempotently insert tasks (ON CONFLICT DO NOTHING)
         for task in tasks:
-            stmt = insert(TaskExecutionRecord).values(
-                task_execution_id=task.id.value,
-                workflow_execution_id=workflow_id.value,
-                task_definition_id=task.task_definition_id.value,
-                state="PENDING",
-                revision=1,
-                has_input=False,
-                stable_input=None,
-                has_output=False,
-                task_output=None,
-                max_attempts=task.max_attempts,
-                next_attempt_ordinal=1,
-                created_at_utc=now_utc,
-                updated_at_utc=now_utc
-            ).on_conflict_do_nothing(
-                index_elements=["workflow_execution_id", "task_definition_id"]
+            stmt = (
+                insert(TaskExecutionRecord)
+                .values(
+                    task_execution_id=task.id.value,
+                    workflow_execution_id=workflow_id.value,
+                    task_definition_id=task.task_definition_id.value,
+                    state="PENDING",
+                    revision=1,
+                    has_input=False,
+                    stable_input=None,
+                    has_output=False,
+                    task_output=None,
+                    max_attempts=task.max_attempts,
+                    next_attempt_ordinal=1,
+                    created_at_utc=now_utc,
+                    updated_at_utc=now_utc,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["workflow_execution_id", "task_definition_id"]
+                )
             )
             await session.execute(stmt)
 
         # Summarized initialization history event (ADR-014)
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="TaskPopulationEstablished",
-            event_payload={"task_count": len(tasks)},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="TaskPopulationEstablished",
+                event_payload={"task_count": len(tasks)},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -743,18 +766,20 @@ async def commit_initialization_complete(
     session: AsyncSession,
     workflow_id: WorkflowExecutionId,
     expected_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Lock workflow row and fetch definition_id
-        wf_row = (await session.execute(
-            select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
-            .where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-                WorkflowExecutionRecord.state == "INITIALIZING"
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
+                .where(
+                    WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                    WorkflowExecutionRecord.state == "INITIALIZING",
+                )
+                .with_for_update()
             )
-            .with_for_update()
-        )).one_or_none()
+        ).one_or_none()
 
         if wf_row is None or wf_row.revision != expected_revision:
             await session.rollback()
@@ -769,34 +794,41 @@ async def commit_initialization_complete(
         expected_task_ids = set(def_row["tasks"].keys())
 
         # Retrieve actual populated task set
-        actual_task_ids = set(await session.scalars(
-            select(TaskExecutionRecord.task_definition_id).where(
-                TaskExecutionRecord.workflow_execution_id == workflow_id.value
-            )
-        ))
-
-        if expected_task_ids != actual_task_ids:
-            await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task membership incomplete or mismatched")
-
-        # Transition INITIALIZING -> RUNNING
-        await session.execute(
-            update(WorkflowExecutionRecord).where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
-            ).values(
-                state="RUNNING",
-                revision=WorkflowExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+        actual_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                )
             )
         )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowExecutionStarted",
-            event_payload={"state": "RUNNING"},
-            occurred_at_utc=now_utc
-        ))
+        if expected_task_ids != actual_task_ids:
+            await session.rollback()
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message="Task membership incomplete or mismatched",
+            )
+
+        # Transition INITIALIZING -> RUNNING
+        await session.execute(
+            update(WorkflowExecutionRecord)
+            .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            .values(
+                state="RUNNING",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowExecutionStarted",
+                event_payload={"state": "RUNNING"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -812,34 +844,40 @@ async def commit_initialization_failure(
     workflow_id: WorkflowExecutionId,
     expected_revision: int,
     cause: FailureCause,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        stmt = update(WorkflowExecutionRecord).where(
-            WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-            WorkflowExecutionRecord.state == "INITIALIZING",
-            WorkflowExecutionRecord.revision == expected_revision
-        ).values(
-            state="FAILED",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=WorkflowExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state == "INITIALIZING",
+                WorkflowExecutionRecord.revision == expected_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         res = await session.execute(stmt)
         if res.rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowInitializationFailed",
-            event_payload={"code": cause.code, "message": cause.message},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowInitializationFailed",
+                event_payload={"code": cause.code, "message": cause.message},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -856,7 +894,7 @@ async def commit_task_readiness(
     expected_task_revision: int,
     workflow_id: WorkflowExecutionId,
     stable_input: JsonObject,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Anti-TOCTOU: Lock owning workflow row and verify RUNNING state
@@ -867,34 +905,42 @@ async def commit_task_readiness(
         )
         if wf_state != "RUNNING":
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING"
+            )
 
         # Update Task PENDING -> RUNNABLE verifying it belongs to the locked workflow
-        stmt = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-            TaskExecutionRecord.state == "PENDING",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="RUNNABLE",
-            has_input=True,
-            stable_input=thaw_json(stable_input),
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "PENDING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RUNNABLE",
+                has_input=True,
+                stable_input=thaw_json(stable_input),
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         result = await session.execute(stmt)
         if result.rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            task_execution_id=task_id.value,
-            event_category="TaskMarkedRunnable",
-            event_payload={"task_id": str(task_id.value)},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                event_category="TaskMarkedRunnable",
+                event_payload={"task_id": str(task_id.value)},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -908,7 +954,7 @@ async def commit_retry_ready(
     task_id: TaskExecutionId,
     expected_task_revision: int,
     workflow_id: WorkflowExecutionId,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Anti-TOCTOU: Lock owning workflow row and verify RUNNING
@@ -919,34 +965,42 @@ async def commit_retry_ready(
         )
         if wf_state != "RUNNING":
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING"
+            )
 
         # Update Task RETRY_WAIT -> RUNNABLE verifying it belongs to the locked workflow
-        stmt = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-            TaskExecutionRecord.state == "RETRY_WAIT",
-            TaskExecutionRecord.retry_ready_at_utc <= now_utc,
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="RUNNABLE",
-            retry_ready_at_utc=None,
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "RETRY_WAIT",
+                TaskExecutionRecord.retry_ready_at_utc <= now_utc,
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RUNNABLE",
+                retry_ready_at_utc=None,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         result = await session.execute(stmt)
         if result.rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            task_execution_id=task_id.value,
-            event_category="TaskRetryReady",
-            event_payload={"task_id": str(task_id.value)},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                event_category="TaskRetryReady",
+                event_payload={"task_id": str(task_id.value)},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -965,7 +1019,7 @@ async def commit_attempt_ownership(
     worker_session_id: WorkerSessionId,
     new_attempt_id: AttemptId,
     start_deadline_utc: datetime,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> tuple[CommitOutcome, int | None]:
     async with session.begin():
         # Anti-TOCTOU: Lock owning workflow row
@@ -976,20 +1030,27 @@ async def commit_attempt_ownership(
         )
         if wf_state != "RUNNING":
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not RUNNING"), None
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow not RUNNING"
+            ), None
 
         # Conditionally transition Task RUNNABLE -> RUNNING and allocate ordinal
-        stmt = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-            TaskExecutionRecord.state == "RUNNABLE",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="RUNNING",
-            revision=TaskExecutionRecord.revision + 1,
-            next_attempt_ordinal=TaskExecutionRecord.next_attempt_ordinal + 1,
-            updated_at_utc=now_utc
-        ).returning(TaskExecutionRecord.next_attempt_ordinal - 1)
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "RUNNABLE",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RUNNING",
+                revision=TaskExecutionRecord.revision + 1,
+                next_attempt_ordinal=TaskExecutionRecord.next_attempt_ordinal + 1,
+                updated_at_utc=now_utc,
+            )
+            .returning(TaskExecutionRecord.next_attempt_ordinal - 1)
+        )
 
         allocated_ordinal = await session.scalar(stmt)
         if allocated_ordinal is None:
@@ -997,30 +1058,34 @@ async def commit_attempt_ownership(
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT), None
 
         # Insert new ExecutionAttempt in CLAIMED state
-        session.add(ExecutionAttemptRecord(
-            attempt_id=new_attempt_id.value,
-            task_execution_id=task_id.value,
-            attempt_ordinal=allocated_ordinal,
-            worker_session_id=worker_session_id.value,
-            state="CLAIMED",
-            revision=1,
-            start_deadline_utc=start_deadline_utc,
-            created_at_utc=now_utc,
-            updated_at_utc=now_utc
-        ))
+        session.add(
+            ExecutionAttemptRecord(
+                attempt_id=new_attempt_id.value,
+                task_execution_id=task_id.value,
+                attempt_ordinal=allocated_ordinal,
+                worker_session_id=worker_session_id.value,
+                state="CLAIMED",
+                revision=1,
+                start_deadline_utc=start_deadline_utc,
+                created_at_utc=now_utc,
+                updated_at_utc=now_utc,
+            )
+        )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            task_execution_id=task_id.value,
-            attempt_id=new_attempt_id.value,
-            event_category="TaskClaimedByWorker",
-            event_payload={
-                "worker_session_id": str(worker_session_id.value),
-                "attempt_ordinal": allocated_ordinal
-            },
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                attempt_id=new_attempt_id.value,
+                event_category="TaskClaimedByWorker",
+                event_payload={
+                    "worker_session_id": str(worker_session_id.value),
+                    "attempt_ordinal": allocated_ordinal,
+                },
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED), allocated_ordinal
 ```
@@ -1036,20 +1101,25 @@ async def commit_worker_execution_start(
     attempt_id: AttemptId,
     worker_session_id: WorkerSessionId,
     expected_attempt_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        stmt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
-            ExecutionAttemptRecord.state == "CLAIMED",
-            ExecutionAttemptRecord.start_deadline_utc >= now_utc,
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="RUNNING",
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
-        ).returning(ExecutionAttemptRecord.task_execution_id)
+        stmt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.state == "CLAIMED",
+                ExecutionAttemptRecord.start_deadline_utc >= now_utc,
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="RUNNING",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+            .returning(ExecutionAttemptRecord.task_execution_id)
+        )
 
         task_id = await session.scalar(stmt)
         if task_id is None:
@@ -1062,15 +1132,17 @@ async def commit_worker_execution_start(
             )
         )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=wf_id,
-            task_execution_id=task_id,
-            attempt_id=attempt_id.value,
-            event_category="AttemptExecutionStarted",
-            event_payload={"state": "RUNNING"},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=wf_id,
+                task_execution_id=task_id,
+                attempt_id=attempt_id.value,
+                event_category="AttemptExecutionStarted",
+                event_payload={"state": "RUNNING"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1089,33 +1161,43 @@ async def commit_worker_task_success(
     task_id: TaskExecutionId,
     expected_task_revision: int,
     output: OutputCommitted,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Transition Attempt RUNNING -> SUCCEEDED verifying task association and worker session
-        stmt_attempt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
-            ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.state == "RUNNING",
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="SUCCEEDED",
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state == "RUNNING",
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="SUCCEEDED",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             # Check for duplicate callback
             existing = await session.scalar(
-                select(ExecutionAttemptRecord).where(ExecutionAttemptRecord.attempt_id == attempt_id.value)
+                select(ExecutionAttemptRecord).where(
+                    ExecutionAttemptRecord.attempt_id == attempt_id.value
+                )
             )
             if existing and existing.state == "SUCCEEDED":
                 current_task = await session.scalar(
-                    select(TaskExecutionRecord).where(TaskExecutionRecord.task_execution_id == task_id.value)
+                    select(TaskExecutionRecord).where(
+                        TaskExecutionRecord.task_execution_id == task_id.value
+                    )
                 )
                 if current_task and thaw_json(output.value) == current_task.task_output:
                     await session.rollback()
-                    return CommitOutcome(status=CommitStatus.COMMITTED, message="Duplicate callback matches")
+                    return CommitOutcome(
+                        status=CommitStatus.COMMITTED, message="Duplicate callback matches"
+                    )
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
@@ -1123,17 +1205,22 @@ async def commit_worker_task_success(
         output_payload = cast("null", JSONB) if output.value is None else thaw_json(output.value)
 
         # Transition Task RUNNING -> SUCCEEDED with Output
-        stmt_task = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.state == "RUNNING",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="SUCCEEDED",
-            has_output=True,
-            task_output=output_payload,
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
-        ).returning(TaskExecutionRecord.workflow_execution_id)
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="SUCCEEDED",
+                has_output=True,
+                task_output=output_payload,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+            .returning(TaskExecutionRecord.workflow_execution_id)
+        )
 
         wf_id = await session.scalar(stmt_task)
         if wf_id is None:
@@ -1141,15 +1228,17 @@ async def commit_worker_task_success(
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
         # Semantic Task Success History Entry
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=wf_id,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="TaskExecutionSucceeded",
-            event_payload={"has_output": True},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=wf_id,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="TaskExecutionSucceeded",
+                event_payload={"has_output": True},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1174,7 +1263,7 @@ async def commit_worker_failure_with_retry(
     workflow_id: WorkflowExecutionId,
     ready_at_utc: datetime,
     cause: FailureCause,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Anti-TOCTOU: Lock owning workflow row and verify RUNNING
@@ -1185,23 +1274,29 @@ async def commit_worker_failure_with_retry(
         )
         if wf_state != "RUNNING":
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow is not RUNNING"
+            )
 
         # Transition Attempt -> FAILED verifying exact worker session and task association
-        stmt_attempt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
-            ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="FAILED",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             await session.rollback()
@@ -1211,31 +1306,40 @@ async def commit_worker_failure_with_retry(
         # 1. Belongs to locked workflow
         # 2. Durable budget remains: next_attempt_ordinal <= max_attempts
         # (With next_attempt_ordinal incremented on ownership, next attempt is allowed iff next_attempt_ordinal <= max_attempts)
-        stmt_task = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-            TaskExecutionRecord.state == "RUNNING",
-            TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="RETRY_WAIT",
-            retry_ready_at_utc=ready_at_utc,
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="RETRY_WAIT",
+                retry_ready_at_utc=ready_at_utc,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_task)).rowcount == 0:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="OCC conflict or retry budget exhausted")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message="OCC conflict or retry budget exhausted",
+            )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="TaskExecutionRetrying",
-            event_payload={"retry_ready_at": ready_at_utc.isoformat(), "code": cause.code},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="TaskExecutionRetrying",
+                event_payload={"retry_ready_at": ready_at_utc.isoformat(), "code": cause.code},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1257,56 +1361,67 @@ async def commit_worker_definitive_failure(
     task_id: TaskExecutionId,
     expected_task_revision: int,
     cause: FailureCause,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        stmt_attempt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
-            ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="FAILED",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        stmt_task = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.state == "RUNNING",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="FAILED",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
-        ).returning(TaskExecutionRecord.workflow_execution_id)
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+            .returning(TaskExecutionRecord.workflow_execution_id)
+        )
 
         wf_id = await session.scalar(stmt_task)
         if wf_id is None:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=wf_id,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="TaskExecutionFailed",
-            event_payload={"code": cause.code},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=wf_id,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="TaskExecutionFailed",
+                event_payload={"code": cause.code},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1322,34 +1437,40 @@ async def commit_workflow_failure_direction(
     workflow_id: WorkflowExecutionId,
     expected_workflow_revision: int,
     cause: FailureCause,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        stmt = update(WorkflowExecutionRecord).where(
-            WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-            WorkflowExecutionRecord.state == "RUNNING",
-            WorkflowExecutionRecord.revision == expected_workflow_revision
-        ).values(
-            state="FAILING",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=WorkflowExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state == "RUNNING",
+                WorkflowExecutionRecord.revision == expected_workflow_revision,
+            )
+            .values(
+                state="FAILING",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         res = await session.execute(stmt)
         if res.rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowExecutionFailing",
-            event_payload={"failure_code": cause.code},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowExecutionFailing",
+                event_payload={"failure_code": cause.code},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1364,30 +1485,36 @@ async def commit_workflow_cancellation_direction(
     session: AsyncSession,
     workflow_id: WorkflowExecutionId,
     expected_workflow_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        stmt = update(WorkflowExecutionRecord).where(
-            WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-            WorkflowExecutionRecord.state.in_(["INITIALIZING", "RUNNING"]),
-            WorkflowExecutionRecord.revision == expected_workflow_revision
-        ).values(
-            state="CANCELLING",
-            revision=WorkflowExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(WorkflowExecutionRecord)
+            .where(
+                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                WorkflowExecutionRecord.state.in_(["INITIALIZING", "RUNNING"]),
+                WorkflowExecutionRecord.revision == expected_workflow_revision,
+            )
+            .values(
+                state="CANCELLING",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         res = await session.execute(stmt)
         if res.rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowCancellationRequested",
-            event_payload={"state": "CANCELLING"},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowCancellationRequested",
+                event_payload={"state": "CANCELLING"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1399,21 +1526,24 @@ Atomically verifies that the owning workflow is in `FAILING` or `CANCELLING` sta
 
 ```python
 async def commit_drain_task_cancellation(
-    session: AsyncSession,
-    task_id: TaskExecutionId,
-    expected_task_revision: int,
-    now_utc: datetime
+    session: AsyncSession, task_id: TaskExecutionId, expected_task_revision: int, now_utc: datetime
 ) -> CommitOutcome:
     async with session.begin():
         # Derive workflow ID and verify drain state
-        task_row = (await session.execute(
-            select(TaskExecutionRecord.workflow_execution_id, TaskExecutionRecord.state)
-            .where(TaskExecutionRecord.task_execution_id == task_id.value)
-        )).one_or_none()
+        task_row = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id, TaskExecutionRecord.state).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).one_or_none()
 
         if task_row is None or task_row.state not in ["PENDING", "RUNNABLE", "RETRY_WAIT"]:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not eligible for drain cancellation")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message="Task not eligible for drain cancellation",
+            )
 
         wf_state = await session.scalar(
             select(WorkflowExecutionRecord.state).where(
@@ -1422,30 +1552,38 @@ async def commit_drain_task_cancellation(
         )
         if wf_state not in ["FAILING", "CANCELLING"]:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Owning workflow is not draining")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Owning workflow is not draining"
+            )
 
-        stmt = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.state.in_(["PENDING", "RUNNABLE", "RETRY_WAIT"]),
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="CANCELLED",
-            retry_ready_at_utc=None,
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.state.in_(["PENDING", "RUNNABLE", "RETRY_WAIT"]),
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED",
+                retry_ready_at_utc=None,
+                revision=TaskExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=task_row.workflow_execution_id,
-            task_execution_id=task_id.value,
-            event_category="TaskExecutionCancelled",
-            event_payload={"reason": "Workflow draining"},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_row.workflow_execution_id,
+                task_execution_id=task_id.value,
+                event_category="TaskExecutionCancelled",
+                event_payload={"reason": "Workflow draining"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1466,14 +1604,17 @@ async def commit_worker_cancellation_ack(
     expected_attempt_revision: int,
     task_id: TaskExecutionId,
     expected_task_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Derive parent workflow_execution_id from task
-        task_wf = (await session.execute(
-            select(TaskExecutionRecord.workflow_execution_id)
-            .where(TaskExecutionRecord.task_execution_id == task_id.value)
-        )).scalar_one_or_none()
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
         if task_wf is None:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found")
@@ -1486,48 +1627,58 @@ async def commit_worker_cancellation_ack(
         )
         if wf_state not in ["FAILING", "CANCELLING"]:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state"
+            )
 
         # Transition Attempt CLAIMED/RUNNING -> CANCELLED verifying exact worker session and task association
-        stmt_attempt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
-            ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="CANCELLED",
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.worker_session_id == worker_session_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
         # Transition Task RUNNING -> CANCELLED verifying locked workflow parent
-        stmt_task = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == task_wf,
-            TaskExecutionRecord.state == "RUNNING",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="CANCELLED",
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == task_wf,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED", revision=TaskExecutionRecord.revision + 1, updated_at_utc=now_utc
+            )
         )
         if (await session.execute(stmt_task)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=task_wf,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="AttemptCancellationAcknowledged",
-            event_payload={"worker_session_id": str(worker_session_id.value)},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="AttemptCancellationAcknowledged",
+                event_payload={"worker_session_id": str(worker_session_id.value)},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1547,13 +1698,16 @@ async def commit_internal_cancellation_deadline(
     expected_attempt_revision: int,
     task_id: TaskExecutionId,
     expected_task_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        task_wf = (await session.execute(
-            select(TaskExecutionRecord.workflow_execution_id)
-            .where(TaskExecutionRecord.task_execution_id == task_id.value)
-        )).scalar_one_or_none()
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
         if task_wf is None:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found")
@@ -1566,49 +1720,59 @@ async def commit_internal_cancellation_deadline(
         )
         if wf_state not in ["FAILING", "CANCELLING"]:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Workflow not in drain state"
+            )
 
         # Transition Attempt CLAIMED/RUNNING -> CANCELLED verifying deadline expiry and task association
-        stmt_attempt = update(ExecutionAttemptRecord).where(
-            ExecutionAttemptRecord.attempt_id == attempt_id.value,
-            ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
-            ExecutionAttemptRecord.cancellation_deadline_utc.is_not(None),
-            ExecutionAttemptRecord.cancellation_deadline_utc <= now_utc,
-            ExecutionAttemptRecord.revision == expected_attempt_revision
-        ).values(
-            state="CANCELLED",
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(
+                ExecutionAttemptRecord.attempt_id == attempt_id.value,
+                ExecutionAttemptRecord.task_execution_id == task_id.value,
+                ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                ExecutionAttemptRecord.cancellation_deadline_utc.is_not(None),
+                ExecutionAttemptRecord.cancellation_deadline_utc <= now_utc,
+                ExecutionAttemptRecord.revision == expected_attempt_revision,
+            )
+            .values(
+                state="CANCELLED",
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
         # Transition Task RUNNING -> CANCELLED
-        stmt_task = update(TaskExecutionRecord).where(
-            TaskExecutionRecord.task_execution_id == task_id.value,
-            TaskExecutionRecord.workflow_execution_id == task_wf,
-            TaskExecutionRecord.state == "RUNNING",
-            TaskExecutionRecord.revision == expected_task_revision
-        ).values(
-            state="CANCELLED",
-            revision=TaskExecutionRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_task = (
+            update(TaskExecutionRecord)
+            .where(
+                TaskExecutionRecord.task_execution_id == task_id.value,
+                TaskExecutionRecord.workflow_execution_id == task_wf,
+                TaskExecutionRecord.state == "RUNNING",
+                TaskExecutionRecord.revision == expected_task_revision,
+            )
+            .values(
+                state="CANCELLED", revision=TaskExecutionRecord.revision + 1, updated_at_utc=now_utc
+            )
         )
         if (await session.execute(stmt_task)).rowcount == 0:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=task_wf,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="AttemptCancellationDeadlineExpired",
-            event_payload={"expired_at": now_utc.isoformat()},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="AttemptCancellationDeadlineExpired",
+                event_payload={"expired_at": now_utc.isoformat()},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1626,10 +1790,12 @@ Unified consistency group for internal failure triggers.
 ```python
 from enum import Enum
 
+
 class InternalFailureTrigger(str, Enum):
     START_DEADLINE_EXPIRED = "START_DEADLINE_EXPIRED"
     EXECUTION_TIMEOUT = "EXECUTION_TIMEOUT"
     WORKER_LOSS = "WORKER_LOSS"
+
 
 async def commit_internal_attempt_failure(
     session: AsyncSession,
@@ -1642,14 +1808,17 @@ async def commit_internal_attempt_failure(
     is_retryable: bool,
     retry_ready_at_utc: datetime | None,
     expected_lost_worker_session_id: WorkerSessionId | None,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
         # Derive workflow ID
-        task_wf = (await session.execute(
-            select(TaskExecutionRecord.workflow_execution_id)
-            .where(TaskExecutionRecord.task_execution_id == task_id.value)
-        )).scalar_one_or_none()
+        task_wf = (
+            await session.execute(
+                select(TaskExecutionRecord.workflow_execution_id).where(
+                    TaskExecutionRecord.task_execution_id == task_id.value
+                )
+            )
+        ).scalar_one_or_none()
         if task_wf is None:
             await session.rollback()
             return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Task not found")
@@ -1665,7 +1834,7 @@ async def commit_internal_attempt_failure(
         attempt_filters = [
             ExecutionAttemptRecord.attempt_id == attempt_id.value,
             ExecutionAttemptRecord.task_execution_id == task_id.value,
-            ExecutionAttemptRecord.revision == expected_attempt_revision
+            ExecutionAttemptRecord.revision == expected_attempt_revision,
         ]
 
         if trigger == InternalFailureTrigger.START_DEADLINE_EXPIRED:
@@ -1678,21 +1847,33 @@ async def commit_internal_attempt_failure(
         elif trigger == InternalFailureTrigger.WORKER_LOSS:
             if expected_lost_worker_session_id is None:
                 await session.rollback()
-                return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Missing expected lost WorkerSessionId")
-            attempt_filters.append(ExecutionAttemptRecord.worker_session_id == expected_lost_worker_session_id.value)
+                return CommitOutcome(
+                    status=CommitStatus.PRECONDITION_FAILED,
+                    message="Missing expected lost WorkerSessionId",
+                )
+            attempt_filters.append(
+                ExecutionAttemptRecord.worker_session_id == expected_lost_worker_session_id.value
+            )
             attempt_filters.append(ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]))
         else:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message=f"Unrecognized internal trigger: {trigger}")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message=f"Unrecognized internal trigger: {trigger}",
+            )
 
-        stmt_attempt = update(ExecutionAttemptRecord).where(*attempt_filters).values(
-            state="FAILED",
-            failure_category=cause.category.value,
-            failure_code=cause.code,
-            failure_message=cause.message,
-            failure_details=thaw_json(cause.details),
-            revision=ExecutionAttemptRecord.revision + 1,
-            updated_at_utc=now_utc
+        stmt_attempt = (
+            update(ExecutionAttemptRecord)
+            .where(*attempt_filters)
+            .values(
+                state="FAILED",
+                failure_category=cause.category.value,
+                failure_code=cause.code,
+                failure_message=cause.message,
+                failure_details=thaw_json(cause.details),
+                revision=ExecutionAttemptRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
         )
         if (await session.execute(stmt_attempt)).rowcount == 0:
             await session.rollback()
@@ -1701,19 +1882,25 @@ async def commit_internal_attempt_failure(
         # Atomic Task Settlement:
         # Retry requires: Workflow RUNNING, trusted is_retryable, retry_ready_at_utc set,
         # AND durable budget remains (next_attempt_ordinal <= max_attempts)
-        can_retry_condition = (wf_state == "RUNNING") and is_retryable and (retry_ready_at_utc is not None)
+        can_retry_condition = (
+            (wf_state == "RUNNING") and is_retryable and (retry_ready_at_utc is not None)
+        )
         if can_retry_condition:
-            stmt_task = update(TaskExecutionRecord).where(
-                TaskExecutionRecord.task_execution_id == task_id.value,
-                TaskExecutionRecord.workflow_execution_id == task_wf,
-                TaskExecutionRecord.state == "RUNNING",
-                TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
-                TaskExecutionRecord.revision == expected_task_revision
-            ).values(
-                state="RETRY_WAIT",
-                retry_ready_at_utc=retry_ready_at_utc,
-                revision=TaskExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+            stmt_task = (
+                update(TaskExecutionRecord)
+                .where(
+                    TaskExecutionRecord.task_execution_id == task_id.value,
+                    TaskExecutionRecord.workflow_execution_id == task_wf,
+                    TaskExecutionRecord.state == "RUNNING",
+                    TaskExecutionRecord.next_attempt_ordinal <= TaskExecutionRecord.max_attempts,
+                    TaskExecutionRecord.revision == expected_task_revision,
+                )
+                .values(
+                    state="RETRY_WAIT",
+                    retry_ready_at_utc=retry_ready_at_utc,
+                    revision=TaskExecutionRecord.revision + 1,
+                    updated_at_utc=now_utc,
+                )
             )
             res = await session.execute(stmt_task)
             if res.rowcount == 0:
@@ -1721,37 +1908,43 @@ async def commit_internal_attempt_failure(
                 can_retry_condition = False
 
         if not can_retry_condition:
-            stmt_task = update(TaskExecutionRecord).where(
-                TaskExecutionRecord.task_execution_id == task_id.value,
-                TaskExecutionRecord.workflow_execution_id == task_wf,
-                TaskExecutionRecord.state == "RUNNING",
-                TaskExecutionRecord.revision == expected_task_revision
-            ).values(
-                state="FAILED",
-                failure_category=cause.category.value,
-                failure_code=cause.code,
-                failure_message=cause.message,
-                failure_details=thaw_json(cause.details),
-                revision=TaskExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+            stmt_task = (
+                update(TaskExecutionRecord)
+                .where(
+                    TaskExecutionRecord.task_execution_id == task_id.value,
+                    TaskExecutionRecord.workflow_execution_id == task_wf,
+                    TaskExecutionRecord.state == "RUNNING",
+                    TaskExecutionRecord.revision == expected_task_revision,
+                )
+                .values(
+                    state="FAILED",
+                    failure_category=cause.category.value,
+                    failure_code=cause.code,
+                    failure_message=cause.message,
+                    failure_details=thaw_json(cause.details),
+                    revision=TaskExecutionRecord.revision + 1,
+                    updated_at_utc=now_utc,
+                )
             )
             if (await session.execute(stmt_task)).rowcount == 0:
                 await session.rollback()
                 return CommitOutcome(status=CommitStatus.OCC_CONFLICT)
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=task_wf,
-            task_execution_id=task_id.value,
-            attempt_id=attempt_id.value,
-            event_category="InternalAttemptFailureSettled",
-            event_payload={
-                "trigger": trigger.value,
-                "cause_code": cause.code,
-                "task_state": "RETRY_WAIT" if can_retry_condition else "FAILED"
-            },
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=task_wf,
+                task_execution_id=task_id.value,
+                attempt_id=attempt_id.value,
+                event_category="InternalAttemptFailureSettled",
+                event_payload={
+                    "trigger": trigger.value,
+                    "cause_code": cause.code,
+                    "task_state": "RETRY_WAIT" if can_retry_condition else "FAILED",
+                },
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1767,17 +1960,19 @@ async def commit_workflow_success(
     workflow_id: WorkflowExecutionId,
     expected_workflow_revision: int,
     output: OutputCommitted,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        wf_row = (await session.execute(
-            select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
-            .where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-                WorkflowExecutionRecord.state == "RUNNING"
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
+                .where(
+                    WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                    WorkflowExecutionRecord.state == "RUNNING",
+                )
+                .with_for_update()
             )
-            .with_for_update()
-        )).one_or_none()
+        ).one_or_none()
 
         if wf_row is None or wf_row.revision != expected_workflow_revision:
             await session.rollback()
@@ -1792,39 +1987,46 @@ async def commit_workflow_success(
         expected_task_ids = set(def_row["tasks"].keys())
 
         # Retrieve successful task set
-        succeeded_task_ids = set(await session.scalars(
-            select(TaskExecutionRecord.task_definition_id).where(
-                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-                TaskExecutionRecord.state == "SUCCEEDED"
+        succeeded_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                    TaskExecutionRecord.state == "SUCCEEDED",
+                )
             )
-        ))
+        )
 
         # Proof of validity: all expected tasks must be SUCCEEDED; missing tasks prevent commit
         if expected_task_ids != succeeded_task_ids:
             await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Not all expected tasks are SUCCEEDED")
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED,
+                message="Not all expected tasks are SUCCEEDED",
+            )
 
         output_payload = cast("null", JSONB) if output.value is None else thaw_json(output.value)
 
         await session.execute(
-            update(WorkflowExecutionRecord).where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
-            ).values(
+            update(WorkflowExecutionRecord)
+            .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            .values(
                 state="SUCCEEDED",
                 has_output=True,
                 workflow_output=output_payload,
                 revision=WorkflowExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+                updated_at_utc=now_utc,
             )
         )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowExecutionSucceeded",
-            event_payload={"has_output": True},
-            occurred_at_utc=now_utc
-        ))
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowExecutionSucceeded",
+                event_payload={"has_output": True},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1839,17 +2041,19 @@ async def commit_workflow_failure(
     session: AsyncSession,
     workflow_id: WorkflowExecutionId,
     expected_workflow_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        wf_row = (await session.execute(
-            select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
-            .where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-                WorkflowExecutionRecord.state == "FAILING"
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
+                .where(
+                    WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                    WorkflowExecutionRecord.state == "FAILING",
+                )
+                .with_for_update()
             )
-            .with_for_update()
-        )).one_or_none()
+        ).one_or_none()
 
         if wf_row is None or wf_row.revision != expected_workflow_revision:
             await session.rollback()
@@ -1862,34 +2066,40 @@ async def commit_workflow_failure(
         )
         expected_task_ids = set(def_row["tasks"].keys())
 
-        terminal_task_ids = set(await session.scalars(
-            select(TaskExecutionRecord.task_definition_id).where(
-                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-                TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"])
-            )
-        ))
-
-        if expected_task_ids != terminal_task_ids:
-            await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Tasks remain active or missing")
-
-        await session.execute(
-            update(WorkflowExecutionRecord).where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
-            ).values(
-                state="FAILED",
-                revision=WorkflowExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+        terminal_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                    TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"]),
+                )
             )
         )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowExecutionFailed",
-            event_payload={"state": "FAILED"},
-            occurred_at_utc=now_utc
-        ))
+        if expected_task_ids != terminal_task_ids:
+            await session.rollback()
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Tasks remain active or missing"
+            )
+
+        await session.execute(
+            update(WorkflowExecutionRecord)
+            .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            .values(
+                state="FAILED",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowExecutionFailed",
+                event_payload={"state": "FAILED"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1904,17 +2114,19 @@ async def commit_workflow_cancellation(
     session: AsyncSession,
     workflow_id: WorkflowExecutionId,
     expected_workflow_revision: int,
-    now_utc: datetime
+    now_utc: datetime,
 ) -> CommitOutcome:
     async with session.begin():
-        wf_row = (await session.execute(
-            select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
-            .where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
-                WorkflowExecutionRecord.state == "CANCELLING"
+        wf_row = (
+            await session.execute(
+                select(WorkflowExecutionRecord.definition_id, WorkflowExecutionRecord.revision)
+                .where(
+                    WorkflowExecutionRecord.workflow_execution_id == workflow_id.value,
+                    WorkflowExecutionRecord.state == "CANCELLING",
+                )
+                .with_for_update()
             )
-            .with_for_update()
-        )).one_or_none()
+        ).one_or_none()
 
         if wf_row is None or wf_row.revision != expected_workflow_revision:
             await session.rollback()
@@ -1927,34 +2139,40 @@ async def commit_workflow_cancellation(
         )
         expected_task_ids = set(def_row["tasks"].keys())
 
-        terminal_task_ids = set(await session.scalars(
-            select(TaskExecutionRecord.task_definition_id).where(
-                TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-                TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"])
-            )
-        ))
-
-        if expected_task_ids != terminal_task_ids:
-            await session.rollback()
-            return CommitOutcome(status=CommitStatus.PRECONDITION_FAILED, message="Tasks remain active or missing")
-
-        await session.execute(
-            update(WorkflowExecutionRecord).where(
-                WorkflowExecutionRecord.workflow_execution_id == workflow_id.value
-            ).values(
-                state="CANCELLED",
-                revision=WorkflowExecutionRecord.revision + 1,
-                updated_at_utc=now_utc
+        terminal_task_ids = set(
+            await session.scalars(
+                select(TaskExecutionRecord.task_definition_id).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                    TaskExecutionRecord.state.in_(["SUCCEEDED", "FAILED", "CANCELLED"]),
+                )
             )
         )
 
-        session.add(HistoryEntryRecord(
-            history_id=uuid4(),
-            workflow_execution_id=workflow_id.value,
-            event_category="WorkflowExecutionCancelled",
-            event_payload={"state": "CANCELLED"},
-            occurred_at_utc=now_utc
-        ))
+        if expected_task_ids != terminal_task_ids:
+            await session.rollback()
+            return CommitOutcome(
+                status=CommitStatus.PRECONDITION_FAILED, message="Tasks remain active or missing"
+            )
+
+        await session.execute(
+            update(WorkflowExecutionRecord)
+            .where(WorkflowExecutionRecord.workflow_execution_id == workflow_id.value)
+            .values(
+                state="CANCELLED",
+                revision=WorkflowExecutionRecord.revision + 1,
+                updated_at_utc=now_utc,
+            )
+        )
+
+        session.add(
+            HistoryEntryRecord(
+                history_id=uuid4(),
+                workflow_execution_id=workflow_id.value,
+                event_category="WorkflowExecutionCancelled",
+                event_payload={"state": "CANCELLED"},
+                occurred_at_utc=now_utc,
+            )
+        )
 
     return CommitOutcome(status=CommitStatus.COMMITTED)
 ```
@@ -1997,9 +2215,15 @@ stmt_active_wf = (
     select(WorkflowExecutionRecord)
     .where(
         WorkflowExecutionRecord.state.in_(["INITIALIZING", "RUNNING", "FAILING", "CANCELLING"]),
-        tuple_(WorkflowExecutionRecord.created_at_utc, WorkflowExecutionRecord.workflow_execution_id) > (cursor_created_at, cursor_wf_id)
+        tuple_(
+            WorkflowExecutionRecord.created_at_utc, WorkflowExecutionRecord.workflow_execution_id
+        )
+        > (cursor_created_at, cursor_wf_id),
     )
-    .order_by(WorkflowExecutionRecord.created_at_utc.asc(), WorkflowExecutionRecord.workflow_execution_id.asc())
+    .order_by(
+        WorkflowExecutionRecord.created_at_utc.asc(),
+        WorkflowExecutionRecord.workflow_execution_id.asc(),
+    )
     .limit(batch_size)
 )
 
@@ -2008,7 +2232,8 @@ stmt_runnable_tasks = (
     select(TaskExecutionRecord)
     .where(
         TaskExecutionRecord.state == "RUNNABLE",
-        tuple_(TaskExecutionRecord.created_at_utc, TaskExecutionRecord.task_execution_id) > (cursor_created_at, cursor_task_id)
+        tuple_(TaskExecutionRecord.created_at_utc, TaskExecutionRecord.task_execution_id)
+        > (cursor_created_at, cursor_task_id),
     )
     .order_by(TaskExecutionRecord.created_at_utc.asc(), TaskExecutionRecord.task_execution_id.asc())
     .limit(batch_size)
@@ -2020,9 +2245,12 @@ stmt_retry_ready = (
     .where(
         TaskExecutionRecord.state == "RETRY_WAIT",
         TaskExecutionRecord.retry_ready_at_utc <= now_utc,
-        tuple_(TaskExecutionRecord.retry_ready_at_utc, TaskExecutionRecord.task_execution_id) > (cursor_retry_at, cursor_task_id)
+        tuple_(TaskExecutionRecord.retry_ready_at_utc, TaskExecutionRecord.task_execution_id)
+        > (cursor_retry_at, cursor_task_id),
     )
-    .order_by(TaskExecutionRecord.retry_ready_at_utc.asc(), TaskExecutionRecord.task_execution_id.asc())
+    .order_by(
+        TaskExecutionRecord.retry_ready_at_utc.asc(), TaskExecutionRecord.task_execution_id.asc()
+    )
     .limit(batch_size)
 )
 
@@ -2031,9 +2259,11 @@ stmt_start_deadline = (
     select(ExecutionAttemptRecord)
     .where(
         ExecutionAttemptRecord.state == "CLAIMED",
-        ExecutionAttemptRecord.start_deadline_utc <= now_utc
+        ExecutionAttemptRecord.start_deadline_utc <= now_utc,
     )
-    .order_by(ExecutionAttemptRecord.start_deadline_utc.asc(), ExecutionAttemptRecord.attempt_id.asc())
+    .order_by(
+        ExecutionAttemptRecord.start_deadline_utc.asc(), ExecutionAttemptRecord.attempt_id.asc()
+    )
     .limit(batch_size)
 )
 
@@ -2043,9 +2273,11 @@ stmt_exec_timeout = (
     .where(
         ExecutionAttemptRecord.state == "RUNNING",
         ExecutionAttemptRecord.execution_timeout_utc.is_not(None),
-        ExecutionAttemptRecord.execution_timeout_utc <= now_utc
+        ExecutionAttemptRecord.execution_timeout_utc <= now_utc,
     )
-    .order_by(ExecutionAttemptRecord.execution_timeout_utc.asc(), ExecutionAttemptRecord.attempt_id.asc())
+    .order_by(
+        ExecutionAttemptRecord.execution_timeout_utc.asc(), ExecutionAttemptRecord.attempt_id.asc()
+    )
     .limit(batch_size)
 )
 
@@ -2054,9 +2286,12 @@ stmt_cancel_deadline = (
     select(ExecutionAttemptRecord)
     .where(
         ExecutionAttemptRecord.cancellation_deadline_utc.is_not(None),
-        ExecutionAttemptRecord.cancellation_deadline_utc <= now_utc
+        ExecutionAttemptRecord.cancellation_deadline_utc <= now_utc,
     )
-    .order_by(ExecutionAttemptRecord.cancellation_deadline_utc.asc(), ExecutionAttemptRecord.attempt_id.asc())
+    .order_by(
+        ExecutionAttemptRecord.cancellation_deadline_utc.asc(),
+        ExecutionAttemptRecord.attempt_id.asc(),
+    )
     .limit(batch_size)
 )
 ```
@@ -2082,7 +2317,7 @@ def map_task_record_to_snapshot(record: TaskExecutionRecord) -> TaskExecution:
             category=FailureCategory(record.failure_category),
             code=record.failure_code,
             message=record.failure_message or "",
-            details=freeze_json(record.failure_details)
+            details=freeze_json(record.failure_details),
         )
 
     return TaskExecution(
@@ -2095,7 +2330,7 @@ def map_task_record_to_snapshot(record: TaskExecutionRecord) -> TaskExecution:
         output=output_presence,
         max_attempts=record.max_attempts,
         retry_ready_at_utc=record.retry_ready_at_utc,
-        terminal_failure_cause=cause
+        terminal_failure_cause=cause,
     )
 ```
 
@@ -2110,7 +2345,9 @@ def map_task_record_to_snapshot(record: TaskExecutionRecord) -> TaskExecution:
        async with engine.connect() as conn:
            version = await conn.scalar(text("SELECT version_num FROM alembic_version;"))
            if version != expected_version:
-               raise RuntimeError(f"Database schema mismatch: expected {expected_version}, found {version}")
+               raise RuntimeError(
+                   f"Database schema mismatch: expected {expected_version}, found {version}"
+               )
    ```
    If mismatched, startup halts immediately with a clear diagnostic error.
 

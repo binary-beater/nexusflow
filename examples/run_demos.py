@@ -45,7 +45,9 @@ from nexusflow.persistence.orm import (
 from nexusflow.persistence.transactions import commit_retry_ready
 from nexusflow.worker.runtime import NexusFlowWorker, WorkerRuntimeConfig
 
-POSTGRES_TEST_URL = "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+POSTGRES_TEST_URL = (
+    "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+)
 
 
 @pytest.fixture
@@ -82,7 +84,10 @@ async def e2e_context():
 async def test_e2e_retry_to_success(e2e_context):
     """Scenario 1: Task fails on attempt 1 with transient error, enters RETRY_WAIT, gets retried, and succeeds on attempt 2."""
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     # 1. Register definition with max_attempts: 2
     yaml_content = """
@@ -187,7 +192,10 @@ output_bindings:
 async def test_e2e_cancellation_lifecycle(e2e_context):
     """Scenario 4: Workflow cancellation triggers cooperative cancellation and terminates CANCELLED."""
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     yaml_content = """
 workflow_name: cancel_pipeline
@@ -250,7 +258,10 @@ async def test_e2e_retry_exhaustion(e2e_context):
     - WorkflowExecution FAILING -> FAILED
     """
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     yaml_content = """
 workflow_name: retry_exhaustion_pipeline
@@ -303,6 +314,7 @@ output_bindings: {}
 
     # Advance scheduler to drain workflow
     from nexusflow.domain.identifiers import WorkflowExecutionId
+
     await e2e_context["scheduler"].drain_workflow(WorkflowExecutionId(wf_id))
 
     # Verify workflow is FAILED
@@ -322,7 +334,8 @@ output_bindings: {}
     async with e2e_context["session_maker"]() as session:
         att_count = await session.scalar(
             select(func.count(ExecutionAttemptRecord.attempt_id)).where(
-                ExecutionAttemptRecord.task_execution_id == tasks_by_name["failing_step"]["task_execution_id"]
+                ExecutionAttemptRecord.task_execution_id
+                == tasks_by_name["failing_step"]["task_execution_id"]
             )
         )
         assert att_count == 1
@@ -332,11 +345,16 @@ output_bindings: {}
 async def test_e2e_scenario_a_pipeline_happy_path(e2e_context):
     """Scenario A: 3-Stage Pipeline Happy Path (A -> B -> C)."""
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     yaml_path = Path("examples/workflows/02_pipeline_happy_path.yaml")
     yaml_content = yaml_path.read_text(encoding="utf-8")
-    def_resp = await client.post("/v1/definitions", headers=public_headers, json={"yaml_content": yaml_content})
+    def_resp = await client.post(
+        "/v1/definitions", headers=public_headers, json={"yaml_content": yaml_content}
+    )
     assert def_resp.status_code == 201
     def_id = def_resp.json()["definition_id"]
 
@@ -359,7 +377,11 @@ async def test_e2e_scenario_a_pipeline_happy_path(e2e_context):
 
     @worker.activity("pipeline.stage_c")
     async def handle_c(final_input: dict):
-        return {"invoice_id": "INV-101", "total": final_input["processed_amount"], "status": "SETTLED"}
+        return {
+            "invoice_id": "INV-101",
+            "total": final_input["processed_amount"],
+            "status": "SETTLED",
+        }
 
     await worker.start(start_background_loops=False)
 
@@ -514,5 +536,3 @@ async def _run_all_standalone():
 
 if __name__ == "__main__":
     asyncio.run(_run_all_standalone())
-
-

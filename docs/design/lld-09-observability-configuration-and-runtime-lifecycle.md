@@ -47,6 +47,7 @@ Process lifecycle states model the runtime operational phase of the control-plan
   ```python
   from enum import StrEnum
 
+
   class ProcessLifecycle(StrEnum):
       SERVING = "SERVING"
       DRAINING = "DRAINING"
@@ -137,17 +138,20 @@ from pydantic import BaseModel, ConfigDict, Field, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from nexusflow.domain.security import PublicPermission
 
+
 class FrozenSettingsModel(BaseModel):
     model_config = ConfigDict(
         frozen=True,
         extra="forbid",
     )
 
+
 @dataclass(frozen=True, slots=True)
 class PublicCredentialConfig:
     principal_id: str
     credential_digest: bytes
     permissions: frozenset[PublicPermission]
+
 
 class DatabaseSettings(FrozenSettingsModel):
     url: PostgresDsn
@@ -156,11 +160,13 @@ class DatabaseSettings(FrozenSettingsModel):
     pool_timeout_seconds: float = Field(default=30.0, ge=1.0)
     max_overflow: int = Field(default=10, ge=0)
 
+
 class HttpSettings(FrozenSettingsModel):
     host: str = "0.0.0.0"
     port: int = 8000
     metrics_port: int = 9090
     max_payload_bytes: int = Field(default=1_048_576, ge=1024, le=10_485_760)  # 1 MB
+
 
 class WorkerRuntimeSettings(FrozenSettingsModel):
     heartbeat_interval_seconds: float = Field(default=5.0, ge=1.0)
@@ -168,24 +174,31 @@ class WorkerRuntimeSettings(FrozenSettingsModel):
     long_poll_timeout_seconds: float = Field(default=30.0, ge=1.0, le=60.0)
     claim_start_deadline_seconds: float = Field(default=10.0, ge=1.0)
 
+
 class RetrySettings(FrozenSettingsModel):
     fixed_delay_seconds: float = Field(default=10.0, gt=0.0)  # Strictly positive duration
     max_engine_occ_retries: int = Field(default=3, ge=1, le=10)
+
 
 class RecoverySettings(FrozenSettingsModel):
     keyset_batch_size: int = Field(default=100, ge=10, le=1000)
     convergence_max_passes: int = Field(default=10, ge=1, le=50)
 
+
 class ShutdownSettings(FrozenSettingsModel):
     grace_window_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
 
+
 class RuntimeSecurityAuthority(FrozenSettingsModel):
     """Immutable runtime security authority populated during bootstrap."""
+
     public_credentials: tuple[PublicCredentialConfig, ...] = Field(default_factory=tuple)
     worker_domain_token_digest: bytes = Field(...)
 
+
 class BootstrapSecurityInput(FrozenSettingsModel):
     """Transient bootstrap schema parsing operator environment variables."""
+
     worker_domain_token: str = Field(...)
     public_api_tokens: str = Field(...)  # JSON string representation from deployment
 
@@ -197,27 +210,28 @@ class BootstrapSecurityInput(FrozenSettingsModel):
             token_raw = entry["token"]
             token_digest = hashlib.sha256(token_raw.encode("utf-8")).digest()
             perms = frozenset(PublicPermission(p) for p in entry["permissions"])
-            creds.append(PublicCredentialConfig(
-                principal_id=entry["principal_id"],
-                credential_digest=token_digest,
-                permissions=perms
-            ))
+            creds.append(
+                PublicCredentialConfig(
+                    principal_id=entry["principal_id"],
+                    credential_digest=token_digest,
+                    permissions=perms,
+                )
+            )
         return RuntimeSecurityAuthority(
             public_credentials=tuple(creds),
             worker_domain_token_digest=worker_digest,
         )
+
 
 class ObservabilitySettings(FrozenSettingsModel):
     log_level: str = "INFO"
     otlp_endpoint: str | None = None
     enable_metrics: bool = True
 
+
 class NexusFlowSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="NEXUSFLOW_",
-        env_nested_delimiter="__",
-        frozen=True,
-        extra="forbid"
+        env_prefix="NEXUSFLOW_", env_nested_delimiter="__", frozen=True, extra="forbid"
     )
 
     db: DatabaseSettings
@@ -258,11 +272,14 @@ In accordance with frozen LLD-01:
 from datetime import datetime, timezone
 from typing import Protocol
 
+
 class Clock(Protocol):
     """Abstract time authority for deterministic testing."""
+
     def now_utc(self) -> datetime:
         """Returns timezone-aware UTC datetime. Raises ValueError if naive."""
         ...
+
 
 class SystemClock:
     def now_utc(self) -> datetime:
@@ -281,9 +298,11 @@ The control plane coordinates ten asynchronous background loops supervised by th
 ```python
 from typing import Protocol
 
+
 class BackgroundLoop(Protocol):
     name: str
     is_critical: bool
+
     async def run(self) -> None: ...
 ```
 
@@ -324,13 +343,18 @@ import asyncio
 import logging
 from typing import Mapping
 
+
 class UnexpectedLoopExit(Exception):
     """Raised when an infinite loop terminates normally while serving."""
+
     pass
+
 
 class UnexpectedLoopCancellation(Exception):
     """Raised when a loop is cancelled unexpectedly while serving."""
+
     pass
+
 
 class RuntimeSupervisor:
     def __init__(
@@ -381,16 +405,25 @@ class RuntimeSupervisor:
                 self._handle_noncritical_failure(name, exc)
 
     def _handle_critical_failure(self, name: str, exc: Exception) -> None:
-        self._logger.critical("Fatal failure in critical background loop '%s': %s", name, exc, exc_info=True)
+        self._logger.critical(
+            "Fatal failure in critical background loop '%s': %s", name, exc, exc_info=True
+        )
         self._healthy = False
         if not self._fatal_event.is_set():
             self._fatal_event.set()
             # Notify process controller to begin controlled termination
-            asyncio.create_task(self._lifecycle.initiate_controlled_drain(reason=f"CRITICAL_LOOP_CRASH:{name}"))
+            asyncio.create_task(
+                self._lifecycle.initiate_controlled_drain(reason=f"CRITICAL_LOOP_CRASH:{name}")
+            )
 
     def _handle_noncritical_failure(self, name: str, exc: Exception) -> None:
         # Non-critical loops fail open; control plane health and readiness remain intact
-        self._logger.warning("Non-critical background loop '%s' encountered error (fail-open): %s", name, exc, exc_info=True)
+        self._logger.warning(
+            "Non-critical background loop '%s' encountered error (fail-open): %s",
+            name,
+            exc,
+            exc_info=True,
+        )
 
     def is_healthy(self) -> bool:
         return self._healthy and not self._fatal_event.is_set()
@@ -483,17 +516,35 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+
 class SanitizedJsonFormatter(logging.Formatter):
     ALLOWED_FIELDS = {
-        "timestamp", "level", "logger", "message", "event_name",
-        "request_id", "trace_id", "span_id", "workflow_execution_id",
-        "task_execution_id", "attempt_id", "duration_ms", "exception"
+        "timestamp",
+        "level",
+        "logger",
+        "message",
+        "event_name",
+        "request_id",
+        "trace_id",
+        "span_id",
+        "workflow_execution_id",
+        "task_execution_id",
+        "attempt_id",
+        "duration_ms",
+        "exception",
     }
 
     REDACTED_KEYS = {
-        "authorization", "token", "password", "secret",
-        "raw_yaml", "workflow_input", "workflow_output",
-        "task_input", "task_output", "dsn"
+        "authorization",
+        "token",
+        "password",
+        "secret",
+        "raw_yaml",
+        "workflow_input",
+        "workflow_output",
+        "task_input",
+        "task_output",
+        "dsn",
     }
 
     def format(self, record: logging.LogRecord) -> str:
@@ -526,7 +577,9 @@ class SanitizedJsonFormatter(logging.Formatter):
             payload["exception"] = exc_str
 
         # Filter to allowed fields only
-        clean_payload = {k: v for k, v in payload.items() if k in self.ALLOWED_FIELDS and v is not None}
+        clean_payload = {
+            k: v for k, v in payload.items() if k in self.ALLOWED_FIELDS and v is not None
+        }
         return json.dumps(clean_payload)
 ```
 
@@ -545,49 +598,44 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
     "nexusflow_http_request_duration_seconds",
     "HTTP request latency by route template and status",
     ["method", "route", "status_code"],
-    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
 )
 
 WORKFLOW_TRANSITION_TOTAL = Counter(
-    "nexusflow_workflow_transition_total",
-    "Workflow transitions by target state",
-    ["to_state"]
+    "nexusflow_workflow_transition_total", "Workflow transitions by target state", ["to_state"]
 )
 
 TASK_TRANSITION_TOTAL = Counter(
-    "nexusflow_task_transition_total",
-    "Task transitions by target state",
-    ["to_state"]
+    "nexusflow_task_transition_total", "Task transitions by target state", ["to_state"]
 )
 
 ATTEMPT_SETTLEMENT_TOTAL = Counter(
     "nexusflow_attempt_settlement_total",
     "Attempt settlement counts by trigger and result",
-    ["trigger", "settlement_result"]
+    ["trigger", "settlement_result"],
 )
 
 ACTIVE_WORKER_SESSIONS = Gauge(
-    "nexusflow_active_worker_sessions",
-    "Current live worker sessions in ephemeral memory"
+    "nexusflow_active_worker_sessions", "Current live worker sessions in ephemeral memory"
 )
 
 DATABASE_OPERATION_DURATION_SECONDS = Histogram(
     "nexusflow_db_operation_duration_seconds",
     "PostgreSQL transaction latency by operation name",
     ["operation", "status"],
-    buckets=(0.002, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0)
+    buckets=(0.002, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
 )
 
 OCC_CONFLICT_TOTAL = Counter(
     "nexusflow_occ_conflict_total",
     "Optimistic concurrency control conflict retries by entity",
-    ["entity_type"]
+    ["entity_type"],
 )
 
 RECOVERY_RUN_DURATION_SECONDS = Histogram(
     "nexusflow_recovery_run_duration_seconds",
     "Duration of mandatory startup recovery sweeps",
-    ["phase"]
+    ["phase"],
 )
 ```
 

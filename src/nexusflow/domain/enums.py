@@ -10,6 +10,7 @@ class WorkflowState(StrEnum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
 
+
 class TaskState(StrEnum):
     PENDING = "PENDING"
     RUNNABLE = "RUNNABLE"
@@ -19,12 +20,14 @@ class TaskState(StrEnum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
 
+
 class AttemptState(StrEnum):
     CLAIMED = "CLAIMED"
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
 
 class FailureCategory(StrEnum):
     CLIENT_INPUT = "CLIENT_INPUT"
@@ -40,10 +43,12 @@ class FailureCategory(StrEnum):
     UNKNOWN_OUTCOME = "UNKNOWN_OUTCOME"
     SECURITY = "SECURITY"
 
+
 class ProcessLifecycle(StrEnum):
     SERVING = "SERVING"
     DRAINING = "DRAINING"
     TERMINATING = "TERMINATING"
+
 
 class PublicPermission(StrEnum):
     DEFINITIONS_READ = "definitions:read"
@@ -51,6 +56,7 @@ class PublicPermission(StrEnum):
     EXECUTIONS_READ = "executions:read"
     EXECUTIONS_START = "executions:start"
     EXECUTIONS_CANCEL = "executions:cancel"
+
 
 class PrincipalType(StrEnum):
     PUBLIC_CLIENT = "PUBLIC_CLIENT"

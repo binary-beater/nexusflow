@@ -129,7 +129,9 @@ async def test_retry_settlement_and_promotion(session: AsyncSession):
     await session.commit()
 
     # 1. Commit worker failure with retry
-    cause = FailureCause(category=FailureCategory.DOMAIN_EXECUTION, code="TRANSIENT_ERR", message="Transient fail")
+    cause = FailureCause(
+        category=FailureCategory.DOMAIN_EXECUTION, code="TRANSIENT_ERR", message="Transient fail"
+    )
     retry_ready = now_utc + timedelta(seconds=5.0)
 
     outcome = await commit_worker_failure_with_retry(
@@ -230,7 +232,9 @@ async def test_definitive_failure_and_workflow_direction(session: AsyncSession):
     await session.flush()
     await session.commit()
 
-    cause = FailureCause(category=FailureCategory.DOMAIN_EXECUTION, code="FATAL_ERR", message="Fatal fail")
+    cause = FailureCause(
+        category=FailureCategory.DOMAIN_EXECUTION, code="FATAL_ERR", message="Fatal fail"
+    )
     outcome, triggered_wf_id = await commit_worker_definitive_failure(
         session=session,
         attempt_id=att_id,

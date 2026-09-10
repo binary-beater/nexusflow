@@ -219,9 +219,7 @@ class NexusFlowWorker:
                         self._thread_pool, lambda: handler(**kwargs)
                     )
                 except TypeError:
-                    output = await loop.run_in_executor(
-                        self._thread_pool, lambda: handler(kwargs)
-                    )
+                    output = await loop.run_in_executor(self._thread_pool, lambda: handler(kwargs))
         except Exception as exc:
             # Report failure callback
             cb_payload = {

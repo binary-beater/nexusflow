@@ -52,7 +52,8 @@ class SanitizedJsonFormatter(logging.Formatter):
         lowered_msg = msg.lower()
         for key in REDACTED_KEYS:
             if key in lowered_msg and any(
-                delim in lowered_msg for delim in ("bearer", "password=", "secret=", "token=", "dsn=")
+                delim in lowered_msg
+                for delim in ("bearer", "password=", "secret=", "token=", "dsn=")
             ):
                 msg = "[MESSAGE REDACTED - CONTAINS SENSITIVE CREDENTIAL]"
                 break

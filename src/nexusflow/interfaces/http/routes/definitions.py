@@ -141,9 +141,7 @@ async def register_definition(
     # 6. Commit to PostgreSQL
     now_utc = datetime.now(UTC)
     new_def_id = DefinitionId.generate()
-    typed_idem_key = (
-        IdempotencyKey(idempotency_key) if idempotency_key is not None else None
-    )
+    typed_idem_key = IdempotencyKey(idempotency_key) if idempotency_key is not None else None
 
     commit_res, resulting_id = await commit_registered_definition(
         session=session,
@@ -171,7 +169,9 @@ async def register_definition(
     )
 
 
-@router.get("/{definition_id}", status_code=status.HTTP_200_OK, response_model=DefinitionResponseDTO)
+@router.get(
+    "/{definition_id}", status_code=status.HTTP_200_OK, response_model=DefinitionResponseDTO
+)
 async def get_definition(
     definition_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],

@@ -108,17 +108,22 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
         assert wf_pre["has_output"] is True
         assert wf_pre["output"] == {"pipeline_result": {"invoice_id": "INV-100", "total": 1000}}
 
-        tasks_pre = (await client.get(f"/v1/executions/{wf_id}/tasks", headers=public_headers)).json()
+        tasks_pre = (
+            await client.get(f"/v1/executions/{wf_id}/tasks", headers=public_headers)
+        ).json()
         assert len(tasks_pre) == 3
         for t in tasks_pre:
             assert t["state"] == "SUCCEEDED"
             assert t["has_output"] is True
 
-        history_pre = (await client.get(f"/v1/executions/{wf_id}/history", headers=public_headers)).json()
+        history_pre = (
+            await client.get(f"/v1/executions/{wf_id}/history", headers=public_headers)
+        ).json()
         assert len(history_pre) >= 8
 
         # 5. RESTART DOCKER POSTGRES CONTAINER
         import shutil
+
         docker_candidates = [
             shutil.which("docker"),
             os.path.expanduser(r"~\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"),
@@ -134,7 +139,16 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
         # Wait for pg_isready
         for _ in range(30):
             res = subprocess.run(
-                [docker_exe, "exec", "nexusflow-postgres", "pg_isready", "-U", "nexusflow_user", "-d", "nexusflow"],
+                [
+                    docker_exe,
+                    "exec",
+                    "nexusflow-postgres",
+                    "pg_isready",
+                    "-U",
+                    "nexusflow_user",
+                    "-d",
+                    "nexusflow",
+                ],
                 capture_output=True,
                 text=True,
             )
@@ -163,7 +177,9 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
         assert wf_post["output"] == wf_pre["output"]
         assert wf_post["created_at_utc"] == wf_pre["created_at_utc"]
 
-        tasks_post = (await client.get(f"/v1/executions/{wf_id}/tasks", headers=public_headers)).json()
+        tasks_post = (
+            await client.get(f"/v1/executions/{wf_id}/tasks", headers=public_headers)
+        ).json()
         assert len(tasks_post) == 3
         for t_pre, t_post in zip(tasks_pre, tasks_post, strict=True):
             assert t_post["task_execution_id"] == t_pre["task_execution_id"]
@@ -172,7 +188,9 @@ async def test_terminal_execution_durability_across_postgres_container_restart()
             assert t_post["has_output"] is True
             assert t_post["output"] == t_pre["output"]
 
-        history_post = (await client.get(f"/v1/executions/{wf_id}/history", headers=public_headers)).json()
+        history_post = (
+            await client.get(f"/v1/executions/{wf_id}/history", headers=public_headers)
+        ).json()
         assert len(history_post) == len(history_pre)
         for h_pre, h_post in zip(history_pre, history_post, strict=True):
             assert h_post["history_id"] == h_pre["history_id"]

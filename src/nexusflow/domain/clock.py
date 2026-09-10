@@ -4,13 +4,16 @@ from typing import Protocol
 
 class Clock(Protocol):
     """Abstract time authority for deterministic testing."""
+
     def now_utc(self) -> datetime:
         """Returns timezone-aware UTC datetime. Raises ValueError if naive."""
         ...
 
+
 class SystemClock:
     def now_utc(self) -> datetime:
         return datetime.now(UTC)
+
 
 class FakeClock:
     def __init__(self, initial_time: datetime | None = None) -> None:
@@ -31,4 +34,5 @@ class FakeClock:
 
     def advance(self, seconds: float) -> None:
         from datetime import timedelta
+
         self._current_time += timedelta(seconds=seconds)

@@ -77,8 +77,10 @@ A critical contradiction is resolved by decoupling process admission: while star
 ```python
 from typing import Protocol
 
+
 class ProcessAdmissionPolicy(Protocol):
     """Process-level traffic admission policy."""
+
     def allows_new_work(self) -> bool:
         """Returns True if operations creating or advancing new work are admitted."""
         ...
@@ -184,8 +186,10 @@ Previous session fencing is preserved intact:
 ```python
 from typing import Protocol
 
+
 class RecoveryGate(Protocol):
     """Process-level ephemeral gate controlling operational traffic admission."""
+
     def is_recovery_complete(self) -> bool:
         """Returns True if mandatory startup reconciliation has converged."""
         ...

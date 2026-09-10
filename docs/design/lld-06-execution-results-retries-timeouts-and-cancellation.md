@@ -231,18 +231,21 @@ from typing import Protocol
 from datetime import timedelta
 from nexusflow.domain.values import AttemptOrdinal, FailureCategory
 
+
 class RetryDelayPolicy(Protocol):
     """Operational engine policy resolving delay between execution attempts."""
+
     def delay_for(
         self,
         *,
         attempt_ordinal: AttemptOrdinal,
         failure_category: FailureCategory,
-    ) -> timedelta:
-        ...
+    ) -> timedelta: ...
+
 
 class FixedRetryDelayPolicy:
     """Standard V1 reference operational policy."""
+
     def __init__(self, delay: timedelta = timedelta(seconds=5)) -> None:
         self._delay = delay
 
@@ -348,7 +351,7 @@ Cancellation targets the exact tuple `(AttemptId, WorkerSessionId)`:
        worker_session_id=attempt.worker_session_id.value,
        task_execution_id=task.id.value,
        workflow_execution_id=workflow.id.value,
-       reason="Workflow cancelling"
+       reason="Workflow cancelling",
    )
    ```
 3. **LLD-05 Transport:** Delivered via worker poll channel. No network calls inside database transactions.
@@ -521,6 +524,7 @@ class SettlementStatus(StrEnum):
     CANCELLATION_ACCEPTED = "CANCELLATION_ACCEPTED"
     CANCELLATION_CONFLICT = "CANCELLATION_CONFLICT"
 
+
 @dataclass(frozen=True, slots=True)
 class SettlementResult:
     status: SettlementStatus
@@ -579,7 +583,7 @@ class SettlementPersistencePort(Protocol):
         task_id: TaskExecutionId,
         expected_task_revision: int,
         output: OutputCommitted,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome: ...
 
     async def commit_worker_failure_with_retry(
@@ -592,7 +596,7 @@ class SettlementPersistencePort(Protocol):
         workflow_id: WorkflowExecutionId,
         ready_at_utc: datetime,
         cause: FailureCause,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome: ...
 
     async def commit_worker_definitive_failure(
@@ -603,7 +607,7 @@ class SettlementPersistencePort(Protocol):
         task_id: TaskExecutionId,
         expected_task_revision: int,
         cause: FailureCause,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome: ...
 
     async def commit_internal_attempt_failure(
@@ -617,7 +621,7 @@ class SettlementPersistencePort(Protocol):
         is_retryable: bool,
         retry_ready_at_utc: datetime | None,
         expected_lost_worker_session_id: WorkerSessionId | None,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome: ...
 
     async def commit_workflow_success(
@@ -625,7 +629,7 @@ class SettlementPersistencePort(Protocol):
         workflow_id: WorkflowExecutionId,
         expected_workflow_revision: int,
         output: OutputCommitted,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome: ...
 ```
 

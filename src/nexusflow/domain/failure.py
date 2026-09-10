@@ -48,10 +48,17 @@ def evaluate_retry_eligibility(
 def classify_worker_failure(report: WorkerFailureReport) -> tuple[FailureCause, bool]:
     """Pure engine classification of worker failure reports into FailureCause and retryability."""
     code = report.error_code.strip() if report.error_code else "UNKNOWN_ERROR"
-    msg = report.error_message.strip() if report.error_message else "Activity failure reported by worker"
+    msg = (
+        report.error_message.strip()
+        if report.error_message
+        else "Activity failure reported by worker"
+    )
 
     # Engine classification rules (LLD-06 Section 3.3)
-    if any(k in code.upper() for k in ("TRANSIENT", "IO_ERROR", "NETWORK", "CONNECTION", "SOCKET", "OSERROR", "TIMEOUT")):
+    if any(
+        k in code.upper()
+        for k in ("TRANSIENT", "IO_ERROR", "NETWORK", "CONNECTION", "SOCKET", "OSERROR", "TIMEOUT")
+    ):
         category = FailureCategory.SYSTEM_TRANSIENT
         retryable = True
     elif "UNAVAILABLE" in code.upper() or "CRASH" in code.upper():

@@ -14,9 +14,10 @@ class CanonicalGraph:
 
     All collections are deeply immutable.
     """
+
     nodes: frozenset[TaskDefinitionId]
     dependencies: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Incoming: B -> {A}
-    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]    # Outgoing: A -> {B}
+    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Outgoing: A -> {B}
 
     def get_upstream_dependencies(self, task_id: TaskDefinitionId) -> frozenset[TaskDefinitionId]:
         return self.dependencies.get(task_id, frozenset())
@@ -29,6 +30,7 @@ class CanonicalGraph:
 
     def is_leaf(self, task_id: TaskDefinitionId) -> bool:
         return len(self.dependents.get(task_id, frozenset())) == 0
+
 
 def build_canonical_graph_and_verify_acyclic(
     tasks: Mapping[TaskDefinitionId, TaskDefinition],
@@ -48,7 +50,9 @@ def build_canonical_graph_and_verify_acyclic(
     for task_id, task in tasks.items():
         for dep_id in task.dependencies:
             if dep_id not in nodes:
-                raise ValueError(f"Precondition violated: dependency '{dep_id}' not found in tasks.")
+                raise ValueError(
+                    f"Precondition violated: dependency '{dep_id}' not found in tasks."
+                )
             dependencies[task_id].add(dep_id)
             dependents[dep_id].add(task_id)
             in_degree[task_id] += 1
@@ -76,9 +80,12 @@ def build_canonical_graph_and_verify_acyclic(
     # Step 4: Detect cycle presence in O(V)
     if visited_count != len(nodes):
         cycle_nodes = sorted([t.value for t in nodes if in_degree[t] > 0])
-        return canonical_graph, [f"Graph contains a cycle involving tasks: {', '.join(cycle_nodes)}"]
+        return canonical_graph, [
+            f"Graph contains a cycle involving tasks: {', '.join(cycle_nodes)}"
+        ]
 
     return canonical_graph, []
+
 
 def compute_deterministic_topological_order(
     graph: CanonicalGraph,

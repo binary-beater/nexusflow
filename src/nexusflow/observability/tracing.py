@@ -26,6 +26,7 @@ def setup_tracing(service_name: str = "nexusflow-control-plane") -> trace.Tracer
     if otlp_endpoint:
         try:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
             otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
             provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
             logger.info("OpenTelemetry OTLP exporter configured for endpoint: %s", otlp_endpoint)

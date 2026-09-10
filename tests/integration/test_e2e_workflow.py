@@ -160,7 +160,9 @@ async def test_e2e_three_stage_pipeline_happy_path(e2e_context):
     history_resp = await client.get(f"/v1/executions/{wf_id}/history", headers=public_headers)
     assert history_resp.status_code == 200
     history = history_resp.json()
-    assert len(history) >= 8  # Creation, population, started, 3x claim, 3x start, 3x success, wf_success
+    assert (
+        len(history) >= 8
+    )  # Creation, population, started, 3x claim, 3x start, 3x success, wf_success
     categories = [h["event_category"] for h in history]
     assert "WorkflowExecutionCreated" in categories
     assert "WorkflowExecutionStarted" in categories

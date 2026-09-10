@@ -110,12 +110,16 @@ class ExecutionScheduler:
 
             # 2. Fetch all tasks for this workflow
             task_rows = (
-                await session.execute(
-                    select(TaskExecutionRecord).where(
-                        TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                (
+                    await session.execute(
+                        select(TaskExecutionRecord).where(
+                            TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         tasks_by_def_id = {row.task_definition_id: row for row in task_rows}
 
@@ -130,7 +134,11 @@ class ExecutionScheduler:
         # Check for due RETRY_WAIT tasks and promote to RUNNABLE
         now_utc = datetime.now(UTC)
         for task_row in task_rows:
-            if task_row.state == "RETRY_WAIT" and task_row.retry_ready_at_utc and task_row.retry_ready_at_utc <= now_utc:
+            if (
+                task_row.state == "RETRY_WAIT"
+                and task_row.retry_ready_at_utc
+                and task_row.retry_ready_at_utc <= now_utc
+            ):
                 async with self._session_factory() as session:
                     await commit_retry_ready(
                         session=session,
@@ -206,13 +214,17 @@ class ExecutionScheduler:
         """Finds RUNNABLE tasks and matches them with live workers."""
         async with self._session_factory() as session:
             runnable_tasks = (
-                await session.execute(
-                    select(TaskExecutionRecord).where(
-                        TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-                        TaskExecutionRecord.state == "RUNNABLE",
+                (
+                    await session.execute(
+                        select(TaskExecutionRecord).where(
+                            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                            TaskExecutionRecord.state == "RUNNABLE",
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         for task_row in runnable_tasks:
             t_def_id = TaskDefinitionId(task_row.task_definition_id)
@@ -247,9 +259,14 @@ class ExecutionScheduler:
                 # Observe scheduling latency: time from RUNNABLE update to CLAIMED commit
                 try:
                     from nexusflow.observability.metrics import SCHEDULING_LATENCY_SECONDS
+
                     if task_row.updated_at_utc:
                         # Handle naive or aware timestamps cleanly
-                        ref_time = task_row.updated_at_utc.replace(tzinfo=UTC) if task_row.updated_at_utc.tzinfo is None else task_row.updated_at_utc
+                        ref_time = (
+                            task_row.updated_at_utc.replace(tzinfo=UTC)
+                            if task_row.updated_at_utc.tzinfo is None
+                            else task_row.updated_at_utc
+                        )
                         latency = (now_utc - ref_time).total_seconds()
                         if latency >= 0:
                             SCHEDULING_LATENCY_SECONDS.observe(latency)
@@ -317,12 +334,16 @@ class ExecutionScheduler:
                 return
 
             task_rows = (
-                await session.execute(
-                    select(TaskExecutionRecord).where(
-                        TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                (
+                    await session.execute(
+                        select(TaskExecutionRecord).where(
+                            TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         now_utc = datetime.now(UTC)
 
@@ -341,15 +362,23 @@ class ExecutionScheduler:
         # 2. Sweep active attempts for cancellation notice / deadline
         async with self._session_factory() as session:
             active_attempts = (
-                await session.execute(
-                    select(ExecutionAttemptRecord)
-                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
-                    .where(
-                        TaskExecutionRecord.workflow_execution_id == workflow_id.value,
-                        ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                (
+                    await session.execute(
+                        select(ExecutionAttemptRecord)
+                        .join(
+                            TaskExecutionRecord,
+                            ExecutionAttemptRecord.task_execution_id
+                            == TaskExecutionRecord.task_execution_id,
+                        )
+                        .where(
+                            TaskExecutionRecord.workflow_execution_id == workflow_id.value,
+                            ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         for att in active_attempts:
             # If cancellation deadline has elapsed, settle internal cancellation
@@ -393,14 +422,20 @@ class ExecutionScheduler:
         # 3. Check terminalization eligibility
         async with self._session_factory() as session:
             updated_tasks = (
-                await session.execute(
-                    select(TaskExecutionRecord).where(
-                        TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                (
+                    await session.execute(
+                        select(TaskExecutionRecord).where(
+                            TaskExecutionRecord.workflow_execution_id == workflow_id.value
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
-            all_terminal = all(t.state in ["SUCCEEDED", "FAILED", "CANCELLED"] for t in updated_tasks)
+            all_terminal = all(
+                t.state in ["SUCCEEDED", "FAILED", "CANCELLED"] for t in updated_tasks
+            )
             if all_terminal:
                 current_wf = (
                     await session.execute(
@@ -437,7 +472,11 @@ class ExecutionScheduler:
             expired_claims = (
                 await session.execute(
                     select(ExecutionAttemptRecord, TaskExecutionRecord)
-                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .join(
+                        TaskExecutionRecord,
+                        ExecutionAttemptRecord.task_execution_id
+                        == TaskExecutionRecord.task_execution_id,
+                    )
                     .where(
                         ExecutionAttemptRecord.state == "CLAIMED",
                         ExecutionAttemptRecord.start_deadline_utc <= now_utc,
@@ -469,7 +508,9 @@ class ExecutionScheduler:
                 if outcome.status == CommitStatus.COMMITTED and wf_id:
                     settled_count += 1
                     if new_state == "FAILED":
-                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await commit_workflow_failure_direction(
+                            session, WorkflowExecutionId(wf_id), cause, now_utc
+                        )
                         await self.drain_workflow(WorkflowExecutionId(wf_id))
 
         async with self._session_factory() as session:
@@ -477,7 +518,11 @@ class ExecutionScheduler:
             expired_timeouts = (
                 await session.execute(
                     select(ExecutionAttemptRecord, TaskExecutionRecord)
-                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .join(
+                        TaskExecutionRecord,
+                        ExecutionAttemptRecord.task_execution_id
+                        == TaskExecutionRecord.task_execution_id,
+                    )
                     .where(
                         ExecutionAttemptRecord.state == "RUNNING",
                         ExecutionAttemptRecord.execution_timeout_utc.is_not(None),
@@ -510,7 +555,9 @@ class ExecutionScheduler:
                 if outcome.status == CommitStatus.COMMITTED and wf_id:
                     settled_count += 1
                     if new_state == "FAILED":
-                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await commit_workflow_failure_direction(
+                            session, WorkflowExecutionId(wf_id), cause, now_utc
+                        )
                         await self.drain_workflow(WorkflowExecutionId(wf_id))
 
         return settled_count
@@ -529,7 +576,11 @@ class ExecutionScheduler:
             orphan_attempts = (
                 await session.execute(
                     select(ExecutionAttemptRecord, TaskExecutionRecord)
-                    .join(TaskExecutionRecord, ExecutionAttemptRecord.task_execution_id == TaskExecutionRecord.task_execution_id)
+                    .join(
+                        TaskExecutionRecord,
+                        ExecutionAttemptRecord.task_execution_id
+                        == TaskExecutionRecord.task_execution_id,
+                    )
                     .where(
                         ExecutionAttemptRecord.worker_session_id.in_(lost_ids),
                         ExecutionAttemptRecord.state.in_(["CLAIMED", "RUNNING"]),
@@ -561,7 +612,9 @@ class ExecutionScheduler:
                 if outcome.status == CommitStatus.COMMITTED and wf_id:
                     settled += 1
                     if new_state == "FAILED":
-                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await commit_workflow_failure_direction(
+                            session, WorkflowExecutionId(wf_id), cause, now_utc
+                        )
                         await self.drain_workflow(WorkflowExecutionId(wf_id))
 
         return settled

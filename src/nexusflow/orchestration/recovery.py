@@ -69,7 +69,11 @@ class StartupRecoveryEngine:
 
     async def recover_system(self) -> None:
         """Run the bounded 8-phase convergence loop until a clean pass is achieved or max_passes reached."""
-        logger.info("startup_recovery_started: max_passes=%s, batch_size=%s", self.max_passes, self.batch_size)
+        logger.info(
+            "startup_recovery_started: max_passes=%s, batch_size=%s",
+            self.max_passes,
+            self.batch_size,
+        )
 
         for pass_idx in range(1, self.max_passes + 1):
             logger.info("startup_recovery_pass_started: pass_num=%s", pass_idx)
@@ -86,7 +90,9 @@ class StartupRecoveryEngine:
                 mutations += await self._phase_8_repair_terminalization(session)
                 await session.commit()
 
-            logger.info("startup_recovery_pass_completed: pass_num=%s, mutations=%s", pass_idx, mutations)
+            logger.info(
+                "startup_recovery_pass_completed: pass_num=%s, mutations=%s", pass_idx, mutations
+            )
             if mutations == 0:
                 logger.info("startup_recovery_converged: passes=%s", pass_idx)
                 return
@@ -166,7 +172,9 @@ class StartupRecoveryEngine:
 
             if is_dead_session or is_expired:
                 cause = FailureCause(
-                    category=FailureCategory.WORKER_AVAILABILITY if is_dead_session else FailureCategory.TIME_BASED,
+                    category=FailureCategory.WORKER_AVAILABILITY
+                    if is_dead_session
+                    else FailureCategory.TIME_BASED,
                     code="WORKER_LOSS" if is_dead_session else "START_DEADLINE_EXPIRED",
                     message="Claimed attempt expired or worker session lost across restart",
                 )
@@ -180,13 +188,17 @@ class StartupRecoveryEngine:
                     cause=cause,
                     is_retryable=True,
                     retry_ready_at_utc=retry_ready,
-                    expected_lost_worker_session_id=WorkerSessionId(att.worker_session_id) if is_dead_session else None,
+                    expected_lost_worker_session_id=WorkerSessionId(att.worker_session_id)
+                    if is_dead_session
+                    else None,
                     now_utc=now_utc,
                 )
                 if outcome.status == CommitStatus.COMMITTED:
                     mutations += 1
                     if wf_id and new_state == "FAILED":
-                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await commit_workflow_failure_direction(
+                            session, WorkflowExecutionId(wf_id), cause, now_utc
+                        )
                         await self.scheduler.drain_workflow(WorkflowExecutionId(wf_id))
 
         return mutations
@@ -211,13 +223,14 @@ class StartupRecoveryEngine:
 
             is_dead_session = att.worker_session_id not in self.worker_registry._sessions
             is_timeout = (
-                att.execution_timeout_utc is not None
-                and att.execution_timeout_utc <= now_utc
+                att.execution_timeout_utc is not None and att.execution_timeout_utc <= now_utc
             )
 
             if is_dead_session or is_timeout:
                 cause = FailureCause(
-                    category=FailureCategory.TIME_BASED if is_timeout else FailureCategory.WORKER_AVAILABILITY,
+                    category=FailureCategory.TIME_BASED
+                    if is_timeout
+                    else FailureCategory.WORKER_AVAILABILITY,
                     code="EXECUTION_TIMEOUT" if is_timeout else "WORKER_LOSS",
                     message="Task execution timeout expired or worker session lost across restart",
                 )
@@ -231,13 +244,17 @@ class StartupRecoveryEngine:
                     cause=cause,
                     is_retryable=True,
                     retry_ready_at_utc=retry_ready,
-                    expected_lost_worker_session_id=WorkerSessionId(att.worker_session_id) if is_dead_session else None,
+                    expected_lost_worker_session_id=WorkerSessionId(att.worker_session_id)
+                    if is_dead_session
+                    else None,
                     now_utc=now_utc,
                 )
                 if outcome.status == CommitStatus.COMMITTED:
                     mutations += 1
                     if wf_id and new_state == "FAILED":
-                        await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                        await commit_workflow_failure_direction(
+                            session, WorkflowExecutionId(wf_id), cause, now_utc
+                        )
                         await self.scheduler.drain_workflow(WorkflowExecutionId(wf_id))
 
         return mutations
@@ -269,7 +286,9 @@ class StartupRecoveryEngine:
             if outcome.status == CommitStatus.COMMITTED:
                 mutations += 1
                 await session.commit()
-                await self.scheduler.advance_workflow(WorkflowExecutionId(t_rec.workflow_execution_id))
+                await self.scheduler.advance_workflow(
+                    WorkflowExecutionId(t_rec.workflow_execution_id)
+                )
 
         return mutations
 
@@ -333,10 +352,7 @@ class StartupRecoveryEngine:
             if not tasks:
                 continue
 
-            all_terminal = all(
-                t.state in ["SUCCEEDED", "FAILED", "CANCELLED"]
-                for t in tasks
-            )
+            all_terminal = all(t.state in ["SUCCEEDED", "FAILED", "CANCELLED"] for t in tasks)
 
             if not all_terminal:
                 continue
@@ -344,9 +360,15 @@ class StartupRecoveryEngine:
             if wf.state == "FAILING":
                 failed_tasks = [t for t in tasks if t.state == "FAILED"]
                 cause = FailureCause(
-                    category=FailureCategory(failed_tasks[0].failure_category) if (failed_tasks and failed_tasks[0].failure_category) else FailureCategory.SYSTEM_PERMANENT,
-                    code=failed_tasks[0].failure_code if failed_tasks and failed_tasks[0].failure_code else "TERMINALIZATION_FAILURE",
-                    message=failed_tasks[0].failure_message if failed_tasks and failed_tasks[0].failure_message else "Task failed during execution",
+                    category=FailureCategory(failed_tasks[0].failure_category)
+                    if (failed_tasks and failed_tasks[0].failure_category)
+                    else FailureCategory.SYSTEM_PERMANENT,
+                    code=failed_tasks[0].failure_code
+                    if failed_tasks and failed_tasks[0].failure_code
+                    else "TERMINALIZATION_FAILURE",
+                    message=failed_tasks[0].failure_message
+                    if failed_tasks and failed_tasks[0].failure_message
+                    else "Task failed during execution",
                 )
                 outcome = await commit_workflow_failure(
                     session=session,
@@ -371,9 +393,15 @@ class StartupRecoveryEngine:
                 if any(t.state == "FAILED" for t in tasks):
                     failed_tasks = [t for t in tasks if t.state == "FAILED"]
                     cause = FailureCause(
-                        category=FailureCategory(failed_tasks[0].failure_category) if (failed_tasks and failed_tasks[0].failure_category) else FailureCategory.SYSTEM_PERMANENT,
-                        code=failed_tasks[0].failure_code if failed_tasks and failed_tasks[0].failure_code else "TERMINALIZATION_FAILURE",
-                        message=failed_tasks[0].failure_message if failed_tasks and failed_tasks[0].failure_message else "Task failed during execution",
+                        category=FailureCategory(failed_tasks[0].failure_category)
+                        if (failed_tasks and failed_tasks[0].failure_category)
+                        else FailureCategory.SYSTEM_PERMANENT,
+                        code=failed_tasks[0].failure_code
+                        if failed_tasks and failed_tasks[0].failure_code
+                        else "TERMINALIZATION_FAILURE",
+                        message=failed_tasks[0].failure_message
+                        if failed_tasks and failed_tasks[0].failure_message
+                        else "Task failed during execution",
                     )
                     outcome = await commit_workflow_failure_direction(
                         session=session,

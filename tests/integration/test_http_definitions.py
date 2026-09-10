@@ -116,6 +116,7 @@ tasks:
     max_attempts: 1
 """
     import uuid
+
     test_run_key = f"test-idem-{uuid.uuid4().hex[:8]}"
     headers = {
         "Content-Type": "application/yaml",
@@ -214,6 +215,7 @@ async def test_api_contract_matrix_scenarios(client_with_postgres_db: AsyncClien
 
     # 4. Definition not found -> 404 DEFINITION_NOT_FOUND
     import uuid
+
     random_id = uuid.uuid4()
     res_404 = await client_with_postgres_db.get(
         f"/v1/definitions/{random_id}",
@@ -227,6 +229,7 @@ async def test_api_contract_matrix_scenarios(client_with_postgres_db: AsyncClien
         "yaml_content": "workflow_name: json_registered\ntasks:\n  s1:\n    activity_type: test\n    max_attempts: 1\n"
     }
     import json
+
     res_json = await client_with_postgres_db.post(
         "/v1/definitions",
         headers={"Content-Type": "application/json", "Authorization": "Bearer dev-secret-token"},
@@ -237,18 +240,30 @@ async def test_api_contract_matrix_scenarios(client_with_postgres_db: AsyncClien
 
     # 6. Idempotency conflict -> 409 IDEMPOTENCY_CONFLICT
     test_key = f"conflict-key-{uuid.uuid4().hex[:8]}"
-    yaml_a = "workflow_name: original\ntasks:\n  t1:\n    activity_type: test\n    max_attempts: 1\n"
-    yaml_b = "workflow_name: modified\ntasks:\n  t1:\n    activity_type: test\n    max_attempts: 1\n"
+    yaml_a = (
+        "workflow_name: original\ntasks:\n  t1:\n    activity_type: test\n    max_attempts: 1\n"
+    )
+    yaml_b = (
+        "workflow_name: modified\ntasks:\n  t1:\n    activity_type: test\n    max_attempts: 1\n"
+    )
     res_init = await client_with_postgres_db.post(
         "/v1/definitions",
-        headers={"Content-Type": "application/yaml", "Authorization": "Bearer dev-secret-token", "Idempotency-Key": test_key},
+        headers={
+            "Content-Type": "application/yaml",
+            "Authorization": "Bearer dev-secret-token",
+            "Idempotency-Key": test_key,
+        },
         content=yaml_a,
     )
     assert res_init.status_code == 201
 
     res_conflict = await client_with_postgres_db.post(
         "/v1/definitions",
-        headers={"Content-Type": "application/yaml", "Authorization": "Bearer dev-secret-token", "Idempotency-Key": test_key},
+        headers={
+            "Content-Type": "application/yaml",
+            "Authorization": "Bearer dev-secret-token",
+            "Idempotency-Key": test_key,
+        },
         content=yaml_b,
     )
     assert res_conflict.status_code == 409

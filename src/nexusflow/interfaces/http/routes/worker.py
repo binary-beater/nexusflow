@@ -127,7 +127,9 @@ async def poll_work(
         )
 
     # 1. Check in-memory delivery queue hint
-    queued = await registry.poll_delivery(session_id, timeout_seconds=min(payload.timeout_seconds, 2.0))
+    queued = await registry.poll_delivery(
+        session_id, timeout_seconds=min(payload.timeout_seconds, 2.0)
+    )
     if queued is not None and isinstance(queued, dict):
         if queued.get("status") == "ASSIGNMENT":
             asgn = queued.get("assignment")
@@ -149,6 +151,7 @@ async def poll_work(
             canc = queued.get("cancellation")
             if canc:
                 from nexusflow.interfaces.http.dto import TaskCancellationPayloadDTO
+
                 return WorkerPollResponseDTO(
                     status="CANCEL_COMMAND",
                     cancellation=TaskCancellationPayloadDTO(
@@ -285,7 +288,9 @@ async def report_callback(
         )
     )
     if task is None:
-        raise ApiHttpException(status_code=500, code="INTERNAL_ERROR", message="Associated task not found.")
+        raise ApiHttpException(
+            status_code=500, code="INTERNAL_ERROR", message="Associated task not found."
+        )
 
     now_utc = datetime.now(UTC)
 
@@ -367,7 +372,11 @@ async def report_callback(
                 now_utc=now_utc,
             )
             if outcome.status != CommitStatus.COMMITTED:
-                raise ApiHttpException(status_code=409, code="STALE_ATTEMPT", message=f"Retry rejected: {outcome.message}")
+                raise ApiHttpException(
+                    status_code=409,
+                    code="STALE_ATTEMPT",
+                    message=f"Retry rejected: {outcome.message}",
+                )
             await session.commit()
         else:
             outcome, wf_id = await commit_worker_definitive_failure(
@@ -381,9 +390,15 @@ async def report_callback(
                 now_utc=now_utc,
             )
             if outcome.status != CommitStatus.COMMITTED:
-                raise ApiHttpException(status_code=409, code="STALE_ATTEMPT", message=f"Definitive failure rejected: {outcome.message}")
+                raise ApiHttpException(
+                    status_code=409,
+                    code="STALE_ATTEMPT",
+                    message=f"Definitive failure rejected: {outcome.message}",
+                )
             if wf_id:
-                await commit_workflow_failure_direction(session, WorkflowExecutionId(wf_id), cause, now_utc)
+                await commit_workflow_failure_direction(
+                    session, WorkflowExecutionId(wf_id), cause, now_utc
+                )
                 await session.commit()
                 await scheduler.drain_workflow(WorkflowExecutionId(wf_id))
             else:
@@ -391,6 +406,7 @@ async def report_callback(
 
     elif isinstance(payload.payload, ActivityCancelAckPayloadDTO):
         from nexusflow.persistence.transactions import commit_worker_cancellation_ack
+
         outcome, _ = await commit_worker_cancellation_ack(
             session=session,
             attempt_id=AttemptId(payload.attempt_id),
@@ -401,7 +417,11 @@ async def report_callback(
             now_utc=now_utc,
         )
         if outcome.status != CommitStatus.COMMITTED:
-            raise ApiHttpException(status_code=409, code="STALE_ATTEMPT", message=f"Cancel ACK rejected: {outcome.message}")
+            raise ApiHttpException(
+                status_code=409,
+                code="STALE_ATTEMPT",
+                message=f"Cancel ACK rejected: {outcome.message}",
+            )
         await session.commit()
         await scheduler.drain_workflow(WorkflowExecutionId(task.workflow_execution_id))
 

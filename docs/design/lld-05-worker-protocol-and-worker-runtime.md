@@ -197,6 +197,7 @@ from nexusflow.domain.values import (
     WorkerSessionId,
 )
 
+
 @dataclass(frozen=True, slots=True)
 class WorkerSessionRecord:
     session_id: WorkerSessionId
@@ -253,11 +254,13 @@ from nexusflow.domain.values import ActivityType, JsonValue
 
 ActivityHandler = Callable[[Mapping[str, JsonValue]], Any | Coroutine[Any, Any, Any]]
 
+
 class ActivityRegistry:
     """
     Local, trusted worker registry mapping ActivityType to local callables.
     Enforces uniqueness at startup and detects duplicate registrations.
     """
+
     def __init__(self) -> None:
         self._handlers: dict[ActivityType, ActivityHandler] = {}
 
@@ -275,14 +278,18 @@ class ActivityRegistry:
     def capabilities(self) -> frozenset[ActivityType]:
         return frozenset(self._handlers.keys())
 
+
 # Global default activity registry for decorator syntax
 _GLOBAL_REGISTRY = ActivityRegistry()
 
+
 def activity(name: str) -> Callable[[ActivityHandler], ActivityHandler]:
     """Decorator for registering activity implementations in worker process."""
+
     def decorator(fn: ActivityHandler) -> ActivityHandler:
         _GLOBAL_REGISTRY.register(name, fn)
         return fn
+
     return decorator
 ```
 
@@ -543,8 +550,10 @@ from typing import Literal, Union, Mapping, Annotated
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
+
 class StrictWorkerDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
 
 # 1. Registration (Always creates a new WorkerSessionId in V1)
 class WorkerRegistrationRequestDTO(StrictWorkerDTO):
@@ -552,20 +561,24 @@ class WorkerRegistrationRequestDTO(StrictWorkerDTO):
     capabilities: list[str] = Field(min_length=1, max_length=1000)
     client_version: str = Field(default="1.0.0", max_length=64)
 
+
 class WorkerRegistrationResponseDTO(StrictWorkerDTO):
     worker_session_id: UUID
     status: Literal["REGISTERED"]
     heartbeat_interval_seconds: float
     worker_liveness_timeout_seconds: float
 
+
 # 2. Heartbeat
 class WorkerHeartbeatRequestDTO(StrictWorkerDTO):
     worker_session_id: UUID
     accepting_new_work: bool = True
 
+
 class WorkerHeartbeatResponseDTO(StrictWorkerDTO):
     status: Literal["ACCEPTED"]
     control_plane_draining: bool = False
+
 
 # 3. Polling
 class WorkerPollRequestDTO(StrictWorkerDTO):
@@ -573,6 +586,7 @@ class WorkerPollRequestDTO(StrictWorkerDTO):
     accepting_new_work: bool = True
     max_items: int = Field(default=1, ge=1, le=10)
     timeout_seconds: float = Field(default=20.0, ge=1.0, le=60.0)
+
 
 class TaskAssignmentPayloadDTO(StrictWorkerDTO):
     attempt_id: UUID
@@ -584,6 +598,7 @@ class TaskAssignmentPayloadDTO(StrictWorkerDTO):
     stable_input: dict[str, object]
     start_deadline_utc: str
 
+
 class TaskCancellationPayloadDTO(StrictWorkerDTO):
     attempt_id: UUID
     worker_session_id: UUID
@@ -591,48 +606,58 @@ class TaskCancellationPayloadDTO(StrictWorkerDTO):
     workflow_execution_id: UUID
     reason: str
 
+
 class WorkerPollResponseDTO(StrictWorkerDTO):
     status: Literal["ASSIGNMENT", "CANCEL_COMMAND", "NO_WORK"]
     assignment: TaskAssignmentPayloadDTO | None = None
     cancellation: TaskCancellationPayloadDTO | None = None
+
 
 # 4. Start Acknowledgement
 class WorkerStartAckRequestDTO(StrictWorkerDTO):
     attempt_id: UUID
     worker_session_id: UUID
 
+
 class WorkerStartAckResponseDTO(StrictWorkerDTO):
     status: Literal["ACCEPTED", "IDEMPOTENT_ALREADY_RUNNING"]
     attempt_id: UUID
     attempt_state: Literal["RUNNING"]
+
 
 # 5. Result Callbacks
 class ActivitySuccessPayloadDTO(StrictWorkerDTO):
     outcome_type: Literal["SUCCESS"]
     output: object  # Must be strictly JSON-compatible
 
+
 class ActivityFailureDetailsDTO(StrictWorkerDTO):
     error_type: str = Field(max_length=256)
     message: str = Field(max_length=4096)
     details: dict[str, object] | None = None
 
+
 class ActivityFailurePayloadDTO(StrictWorkerDTO):
     outcome_type: Literal["FAILURE"]
     error: ActivityFailureDetailsDTO
+
 
 class ActivityCancelAckPayloadDTO(StrictWorkerDTO):
     outcome_type: Literal["CANCEL_ACK"]
     observed_state: Literal["COOPERATIVELY_STOPPED", "ALREADY_COMPLETED", "NOT_FOUND"]
 
+
 WorkerCallbackOutcomeDTO = Annotated[
     Union[ActivitySuccessPayloadDTO, ActivityFailurePayloadDTO, ActivityCancelAckPayloadDTO],
-    Field(discriminator="outcome_type")
+    Field(discriminator="outcome_type"),
 ]
+
 
 class WorkerCallbackRequestDTO(StrictWorkerDTO):
     attempt_id: UUID
     worker_session_id: UUID
     payload: WorkerCallbackOutcomeDTO
+
 
 class WorkerCallbackResponseDTO(StrictWorkerDTO):
     status: Literal["ACCEPTED", "IDEMPOTENT_DUPLICATE"]

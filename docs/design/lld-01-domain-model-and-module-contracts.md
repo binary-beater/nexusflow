@@ -166,82 +166,120 @@ import math
 # 1. Opaque Typed Identifiers (UUIDv4 Underneath)
 # =====================================================================
 
+
 @dataclass(frozen=True, slots=True)
 class DefinitionId:
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowExecutionId:
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 @dataclass(frozen=True, slots=True)
 class TaskExecutionId:
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 @dataclass(frozen=True, slots=True)
 class AttemptId:
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 @dataclass(frozen=True, slots=True)
 class WorkerSessionId:
     """Runtime incarnation identity of a worker process. Non-secret correlation ID."""
+
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 @dataclass(frozen=True, slots=True)
 class HistoryEntryId:
     value: UUID
-    def __str__(self) -> str: return str(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 # =====================================================================
 # 2. Local Semantic Identifiers & Canonical Types
 # =====================================================================
 
+
 @dataclass(frozen=True, slots=True)
 class TaskDefinitionId:
     """Local semantic task identity within a workflow specification (e.g., 'validate_payment')."""
+
     value: str
+
     def __post_init__(self) -> None:
         if not self.value or len(self.value) > 256:
             raise ValueError("TaskDefinitionId must be a non-empty string <= 256 characters.")
         if any(c in self.value for c in "\x00\r\n\t"):
             raise ValueError("TaskDefinitionId contains prohibited control characters.")
-    def __str__(self) -> str: return self.value
+
+    def __str__(self) -> str:
+        return self.value
+
 
 @dataclass(frozen=True, slots=True)
 class ActivityType:
     """Canonical activity string matched via exact byte-for-byte string equality."""
+
     name: str
+
     def __post_init__(self) -> None:
         if not self.name or len(self.name) > 256:
             raise ValueError("ActivityType must be a non-empty string <= 256 characters.")
         if any(c in self.name for c in "\x00\r\n\t"):
             raise ValueError("ActivityType contains prohibited control characters.")
-    def __str__(self) -> str: return self.name
+
+    def __str__(self) -> str:
+        return self.name
+
 
 # =====================================================================
 # 3. Application Idempotency Identifiers
 # =====================================================================
 
+
 @dataclass(frozen=True, slots=True)
 class IdempotencyKey:
     """Client-provided idempotency token."""
+
     value: str
+
     def __post_init__(self) -> None:
         if not self.value or len(self.value) > 256:
             raise ValueError("IdempotencyKey must be between 1 and 256 characters.")
 
+
 @dataclass(frozen=True, slots=True)
 class RequestFingerprint:
     """Cryptographic SHA-256 digest of normalized request payload to verify semantic equivalence."""
+
     digest: str
+
     def __post_init__(self) -> None:
         if len(self.digest) != 64:
             raise ValueError("RequestFingerprint must be a 64-character SHA-256 hex string.")
+
 
 # =====================================================================
 # 4. Strict Deeply Immutable JSON Domain Types & Canonicalization
@@ -251,6 +289,7 @@ JsonPrimitive: TypeAlias = Union[None, bool, int, float, str]
 JsonArray: TypeAlias = tuple["JsonValue", ...]
 JsonObject: TypeAlias = Mapping[str, "JsonValue"]
 JsonValue: TypeAlias = Union[JsonPrimitive, JsonArray, JsonObject]
+
 
 def freeze_json(value: object) -> JsonValue:
     """
@@ -276,16 +315,22 @@ def freeze_json(value: object) -> JsonValue:
         frozen_map = {str(k): freeze_json(v) for k, v in value.items()}
         return MappingProxyType(frozen_map)
     else:
-        raise TypeError(f"Object of type '{type(value).__name__}' is not JSON-compatible: {value!r}")
+        raise TypeError(
+            f"Object of type '{type(value).__name__}' is not JSON-compatible: {value!r}"
+        )
+
 
 # =====================================================================
 # 5. Attempt Ordinal (Monotonic Positive Integer >= 1)
 # =====================================================================
 
+
 @dataclass(frozen=True, slots=True)
 class AttemptOrdinal:
     """1-based monotonic attempt counter. Physical allocation is managed by persistence (LLD-02)."""
+
     value: int
+
     def __post_init__(self) -> None:
         if self.value < 1:
             raise ValueError(f"AttemptOrdinal must be >= 1, got {self.value}")
@@ -301,19 +346,25 @@ To satisfy ADR-010 and eliminate ambiguity between uncommitted output and commit
 ```python
 from abc import ABC
 
+
 @dataclass(frozen=True, slots=True)
 class OutputPresence(ABC):
     """Sum type distinguishing absent/uncommitted output from committed output."""
+
     pass
+
 
 @dataclass(frozen=True, slots=True)
 class OutputAbsent(OutputPresence):
     """Output is not yet committed (entity is in progress, failed, or cancelled)."""
+
     pass
+
 
 @dataclass(frozen=True, slots=True)
 class OutputCommitted(OutputPresence):
     """Output is durably committed. The value may be any JsonValue, including None (JSON null)."""
+
     value: JsonValue
 ```
 
@@ -322,6 +373,7 @@ Categorizes causes per ADR-018 without leaking exceptions or tracebacks:
 
 ```python
 from enum import StrEnum
+
 
 class FailureCategory(StrEnum):
     CLIENT_INPUT = "CLIENT_INPUT"
@@ -337,16 +389,20 @@ class FailureCategory(StrEnum):
     UNKNOWN_OUTCOME = "UNKNOWN_OUTCOME"
     SECURITY = "SECURITY"
 
+
 @dataclass(frozen=True, slots=True)
 class WorkerFailureReport:
     """Untrusted raw observation submitted by a worker. Worker never decides retryability."""
+
     error_code: str
     error_message: str
     details: JsonObject | None = None
 
+
 @dataclass(frozen=True, slots=True)
 class FailureCause:
     """Domain-safe normalized failure cause attached to failed attempts and tasks."""
+
     category: FailureCategory
     code: str
     message: str
@@ -365,40 +421,51 @@ Per ADR-010, both task inputs and workflow outputs support whole-value bindings 
 @dataclass(frozen=True, slots=True)
 class LiteralBinding:
     """Injects a static, immutable JSON-compatible literal."""
+
     value: JsonValue
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowInputBinding:
     """Binds the entire immutable workflow execution input value."""
+
     pass
+
 
 @dataclass(frozen=True, slots=True)
 class TaskOutputBinding:
     """Binds the entire committed output of a direct upstream dependency task."""
+
     upstream_task_id: TaskDefinitionId
 
+
 InputBinding: TypeAlias = Union[LiteralBinding, WorkflowInputBinding, TaskOutputBinding]
+
 
 # --- Workflow Output Bindings (ADR-010 Section 10.9) ---
 @dataclass(frozen=True, slots=True)
 class WorkflowTaskOutputBinding:
     """References the authoritative whole-value output of any task defined in the workflow."""
+
     source_task_id: TaskDefinitionId
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowInputPassthroughBinding:
     """Passes through the entire immutable workflow execution input value."""
+
     pass
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowLiteralOutputBinding:
     """Binds a static literal value to a named workflow output."""
+
     value: JsonValue
 
+
 WorkflowOutputBinding: TypeAlias = Union[
-    WorkflowTaskOutputBinding,
-    WorkflowInputPassthroughBinding,
-    WorkflowLiteralOutputBinding
+    WorkflowTaskOutputBinding, WorkflowInputPassthroughBinding, WorkflowLiteralOutputBinding
 ]
 ```
 
@@ -427,9 +494,11 @@ class CandidateWorkflowSpec:
     Unvalidated candidate specification from YAML parser. Capable of representing invalid references,
     missing dependencies, self-loops, and cycles prior to ADR-004 semantic validation.
     """
+
     workflow_name: str
     tasks: Sequence[TaskDefinition]
     output_bindings: Mapping[str, WorkflowOutputBinding] | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class ValidatedWorkflowSpec:
@@ -437,6 +506,7 @@ class ValidatedWorkflowSpec:
     Immutable, semantically validated workflow specification.
     Guaranteed by ADR-004 to be an acyclic DAG with all dependencies and whole-value bindings valid.
     """
+
     workflow_name: str
     tasks: Mapping[TaskDefinitionId, TaskDefinition]
     output_bindings: Mapping[str, WorkflowOutputBinding]  # Empty map indicates JSON null output
@@ -454,9 +524,10 @@ An immutable, bidirectional adjacency DAG constructed in $O(V+E)$:
 @dataclass(frozen=True, slots=True)
 class CanonicalGraph:
     """Sparse bidirectional adjacency DAG derived strictly from ValidatedWorkflowSpec."""
+
     nodes: frozenset[TaskDefinitionId]
     dependencies: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Incoming edges
-    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]    # Outgoing edges
+    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Outgoing edges
 
     @classmethod
     def from_spec(cls, spec: ValidatedWorkflowSpec) -> CanonicalGraph:
@@ -498,6 +569,7 @@ class WorkflowState(StrEnum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
 
+
 class TaskState(StrEnum):
     PENDING = "PENDING"
     RUNNABLE = "RUNNABLE"
@@ -506,6 +578,7 @@ class TaskState(StrEnum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
 
 class AttemptState(StrEnum):
     CLAIMED = "CLAIMED"
@@ -523,6 +596,7 @@ import dataclasses
 
 E = TypeVar("E")
 
+
 class SemanticEvent(StrEnum):
     # Workflow Events
     WORKFLOW_INITIALIZED = "WORKFLOW_INITIALIZED"
@@ -533,7 +607,7 @@ class SemanticEvent(StrEnum):
     WORKFLOW_SUCCEEDED = "WORKFLOW_SUCCEEDED"
     WORKFLOW_FAILED = "WORKFLOW_FAILED"
     WORKFLOW_CANCELLED = "WORKFLOW_CANCELLED"
-    
+
     # Task Events
     TASK_INITIAL_RUNNABLE = "TASK_INITIAL_RUNNABLE"
     TASK_RETRY_RUNNABLE = "TASK_RETRY_RUNNABLE"
@@ -550,19 +624,23 @@ class SemanticEvent(StrEnum):
     ATTEMPT_FAILED = "ATTEMPT_FAILED"
     ATTEMPT_CANCELLED_SETTLED = "ATTEMPT_CANCELLED_SETTLED"
 
+
 @dataclass(frozen=True, slots=True)
 class TransitionApplied(Generic[E]):
     entity: E
     event: SemanticEvent
 
+
 @dataclass(frozen=True, slots=True)
 class TransitionRejected:
     reason: str
+
 
 @dataclass(frozen=True, slots=True)
 class TransitionNoOp(Generic[E]):
     entity: E
     reason: str
+
 
 TransitionResult: TypeAlias = Union[TransitionApplied[E], TransitionRejected, TransitionNoOp[E]]
 ```
@@ -571,6 +649,7 @@ TransitionResult: TypeAlias = Union[TransitionApplied[E], TransitionRejected, Tr
 
 ```python
 from datetime import datetime
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowExecution:
@@ -585,12 +664,18 @@ class WorkflowExecution:
     updated_at_utc: datetime | None = None
 
     def is_terminal(self) -> bool:
-        return self.state in (WorkflowState.SUCCEEDED, WorkflowState.FAILED, WorkflowState.CANCELLED)
+        return self.state in (
+            WorkflowState.SUCCEEDED,
+            WorkflowState.FAILED,
+            WorkflowState.CANCELLED,
+        )
 
     def is_draining(self) -> bool:
         return self.state in (WorkflowState.FAILING, WorkflowState.CANCELLING)
 
+
 # --- Pure Workflow State Transitions ---
+
 
 def begin_running(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     if wf.state != WorkflowState.INITIALIZING:
@@ -598,20 +683,27 @@ def begin_running(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     updated = dataclasses.replace(wf, state=WorkflowState.RUNNING)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_STARTED)
 
-def fail_initialization(wf: WorkflowExecution, cause: FailureCause) -> TransitionResult[WorkflowExecution]:
+
+def fail_initialization(
+    wf: WorkflowExecution, cause: FailureCause
+) -> TransitionResult[WorkflowExecution]:
     """Definitive, unrecoverable execution-specific semantic initialization failure (ADR-006)."""
     if wf.state != WorkflowState.INITIALIZING:
         return TransitionRejected(f"Cannot fail initialization from state '{wf.state}'")
     updated = dataclasses.replace(wf, state=WorkflowState.FAILED, failure_cause=cause)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_INIT_FAILED)
 
-def begin_failing(wf: WorkflowExecution, cause: FailureCause) -> TransitionResult[WorkflowExecution]:
+
+def begin_failing(
+    wf: WorkflowExecution, cause: FailureCause
+) -> TransitionResult[WorkflowExecution]:
     if wf.state == WorkflowState.FAILING:
         return TransitionNoOp(entity=wf, reason="Workflow already FAILING")
     if wf.state != WorkflowState.RUNNING:
         return TransitionRejected(f"Cannot begin FAILING from state '{wf.state}'")
     updated = dataclasses.replace(wf, state=WorkflowState.FAILING, failure_cause=cause)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_FAILING_BEGUN)
+
 
 def begin_cancellation(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     if wf.state == WorkflowState.CANCELLING:
@@ -621,28 +713,37 @@ def begin_cancellation(wf: WorkflowExecution) -> TransitionResult[WorkflowExecut
     updated = dataclasses.replace(wf, state=WorkflowState.CANCELLING)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_CANCELLING_BEGUN)
 
-def complete_success(wf: WorkflowExecution, output_value: JsonValue) -> TransitionResult[WorkflowExecution]:
+
+def complete_success(
+    wf: WorkflowExecution, output_value: JsonValue
+) -> TransitionResult[WorkflowExecution]:
     if wf.state != WorkflowState.RUNNING:
         return TransitionRejected(f"Cannot succeed workflow in state '{wf.state}'")
     updated = dataclasses.replace(
         wf,
         state=WorkflowState.SUCCEEDED,
         output=OutputCommitted(value=output_value),
-        failure_cause=None
+        failure_cause=None,
     )
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_SUCCEEDED)
+
 
 def complete_failure(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     """Terminal settlement after all expected tasks have reached a terminal state."""
     if wf.state != WorkflowState.FAILING:
-        return TransitionRejected(f"Cannot complete failure from state '{wf.state}'; must be FAILING")
+        return TransitionRejected(
+            f"Cannot complete failure from state '{wf.state}'; must be FAILING"
+        )
     updated = dataclasses.replace(wf, state=WorkflowState.FAILED)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_FAILED)
+
 
 def complete_cancellation(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     """Terminal settlement after all expected tasks have reached a terminal state."""
     if wf.state != WorkflowState.CANCELLING:
-        return TransitionRejected(f"Cannot complete cancellation from state '{wf.state}'; must be CANCELLING")
+        return TransitionRejected(
+            f"Cannot complete cancellation from state '{wf.state}'; must be CANCELLING"
+        )
     updated = dataclasses.replace(wf, state=WorkflowState.CANCELLED)
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_CANCELLED)
 ```
@@ -666,19 +767,21 @@ class TaskExecution:
     def is_terminal(self) -> bool:
         return self.state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.CANCELLED)
 
+
 # --- Pure Task State Transitions ---
 
-def mark_initially_runnable(task: TaskExecution, resolved_input: JsonObject) -> TransitionResult[TaskExecution]:
+
+def mark_initially_runnable(
+    task: TaskExecution, resolved_input: JsonObject
+) -> TransitionResult[TaskExecution]:
     """The ONLY path that materializes stable_input (PENDING -> RUNNABLE)."""
     if task.state != TaskState.PENDING:
         return TransitionRejected(f"Cannot mark initially RUNNABLE from state '{task.state}'")
     updated = dataclasses.replace(
-        task,
-        state=TaskState.RUNNABLE,
-        stable_input=resolved_input,
-        retry_ready_at_utc=None
+        task, state=TaskState.RUNNABLE, stable_input=resolved_input, retry_ready_at_utc=None
     )
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_INITIAL_RUNNABLE)
+
 
 def mark_retry_ready(task: TaskExecution, now_utc: datetime) -> TransitionResult[TaskExecution]:
     """
@@ -689,13 +792,12 @@ def mark_retry_ready(task: TaskExecution, now_utc: datetime) -> TransitionResult
         return TransitionRejected(f"Cannot mark retry ready from state '{task.state}'")
     if task.retry_ready_at_utc is not None and now_utc < task.retry_ready_at_utc:
         return TransitionRejected(f"Retry timer has not yet elapsed: {task.retry_ready_at_utc}")
-    assert task.stable_input is not None, "Invariant fault: stable_input must be present during retry"
-    updated = dataclasses.replace(
-        task,
-        state=TaskState.RUNNABLE,
-        retry_ready_at_utc=None
+    assert task.stable_input is not None, (
+        "Invariant fault: stable_input must be present during retry"
     )
+    updated = dataclasses.replace(task, state=TaskState.RUNNABLE, retry_ready_at_utc=None)
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_RETRY_RUNNABLE)
+
 
 def mark_running(task: TaskExecution) -> TransitionResult[TaskExecution]:
     if task.state != TaskState.RUNNABLE:
@@ -703,35 +805,29 @@ def mark_running(task: TaskExecution) -> TransitionResult[TaskExecution]:
     updated = dataclasses.replace(task, state=TaskState.RUNNING)
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_RUNNING_STARTED)
 
+
 def mark_succeeded(task: TaskExecution, output_value: JsonValue) -> TransitionResult[TaskExecution]:
     if task.state != TaskState.RUNNING:
         return TransitionRejected(f"Cannot mark SUCCEEDED from state '{task.state}'")
     updated = dataclasses.replace(
-        task,
-        state=TaskState.SUCCEEDED,
-        output=OutputCommitted(value=output_value)
+        task, state=TaskState.SUCCEEDED, output=OutputCommitted(value=output_value)
     )
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_SUCCEEDED)
+
 
 def schedule_retry(task: TaskExecution, ready_at_utc: datetime) -> TransitionResult[TaskExecution]:
     if task.state != TaskState.RUNNING:
         return TransitionRejected(f"Cannot schedule retry from state '{task.state}'")
-    updated = dataclasses.replace(
-        task,
-        state=TaskState.RETRY_WAIT,
-        retry_ready_at_utc=ready_at_utc
-    )
+    updated = dataclasses.replace(task, state=TaskState.RETRY_WAIT, retry_ready_at_utc=ready_at_utc)
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_RETRY_WAITING)
+
 
 def mark_failed(task: TaskExecution, cause: FailureCause) -> TransitionResult[TaskExecution]:
     if task.state != TaskState.RUNNING:
         return TransitionRejected(f"Cannot mark FAILED from state '{task.state}'")
-    updated = dataclasses.replace(
-        task,
-        state=TaskState.FAILED,
-        terminal_failure_cause=cause
-    )
+    updated = dataclasses.replace(task, state=TaskState.FAILED, terminal_failure_cause=cause)
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_FAILED)
+
 
 def cancel_unstarted_task(task: TaskExecution) -> TransitionResult[TaskExecution]:
     """Settles unstarted sibling tasks to CANCELLED during workflow FAILING or CANCELLING."""
@@ -741,6 +837,7 @@ def cancel_unstarted_task(task: TaskExecution) -> TransitionResult[TaskExecution
         return TransitionRejected(f"Cannot cancel unstarted task in state '{task.state}'")
     updated = dataclasses.replace(task, state=TaskState.CANCELLED)
     return TransitionApplied(entity=updated, event=SemanticEvent.TASK_DRAIN_CANCELLED)
+
 
 def settle_task_from_cancelled_attempt(task: TaskExecution) -> TransitionResult[TaskExecution]:
     """Transitions Task RUNNING -> CANCELLED upon authoritative cancellation settlement of active attempt."""
@@ -769,9 +866,13 @@ class ExecutionAttempt:
     def is_terminal(self) -> bool:
         return self.state in (AttemptState.SUCCEEDED, AttemptState.FAILED, AttemptState.CANCELLED)
 
+
 # --- Pure Attempt State Transitions ---
 
-def observe_attempt_start(attempt: ExecutionAttempt, now_utc: datetime) -> TransitionResult[ExecutionAttempt]:
+
+def observe_attempt_start(
+    attempt: ExecutionAttempt, now_utc: datetime
+) -> TransitionResult[ExecutionAttempt]:
     if attempt.state != AttemptState.CLAIMED:
         return TransitionRejected(f"Cannot transition to RUNNING from state '{attempt.state}'")
     if now_utc > attempt.start_deadline_utc:
@@ -779,17 +880,22 @@ def observe_attempt_start(attempt: ExecutionAttempt, now_utc: datetime) -> Trans
     updated = dataclasses.replace(attempt, state=AttemptState.RUNNING)
     return TransitionApplied(entity=updated, event=SemanticEvent.ATTEMPT_START_OBSERVED)
 
+
 def complete_attempt_success(attempt: ExecutionAttempt) -> TransitionResult[ExecutionAttempt]:
     if attempt.state != AttemptState.RUNNING:
         return TransitionRejected(f"Cannot complete attempt in state '{attempt.state}'")
     updated = dataclasses.replace(attempt, state=AttemptState.SUCCEEDED)
     return TransitionApplied(entity=updated, event=SemanticEvent.ATTEMPT_SUCCEEDED)
 
-def complete_attempt_failure(attempt: ExecutionAttempt, cause: FailureCause) -> TransitionResult[ExecutionAttempt]:
+
+def complete_attempt_failure(
+    attempt: ExecutionAttempt, cause: FailureCause
+) -> TransitionResult[ExecutionAttempt]:
     if attempt.state not in (AttemptState.CLAIMED, AttemptState.RUNNING):
         return TransitionRejected(f"Cannot fail attempt in state '{attempt.state}'")
     updated = dataclasses.replace(attempt, state=AttemptState.FAILED, terminal_failure_cause=cause)
     return TransitionApplied(entity=updated, event=SemanticEvent.ATTEMPT_FAILED)
+
 
 def settle_attempt_cancelled(attempt: ExecutionAttempt) -> TransitionResult[ExecutionAttempt]:
     """Authoritative logical cancellation settlement (worker ack or cancellation deadline expiry)."""
@@ -812,7 +918,9 @@ A `WorkerSession` represents ephemeral in-process coordination state ([ADR-008](
 @dataclass(frozen=True, slots=True)
 class SessionContinuityProof:
     """Opaque verification token proving continuity of a surviving worker process."""
+
     token: str
+
 
 @dataclass(frozen=True, slots=True)
 class WorkerSession:
@@ -838,8 +946,7 @@ Domain services encapsulate multi-entity business rules without performing I/O o
 ### 11.1 Routing Compatibility Service ([ADR-009](../architecture/adr-009-task-routing.md))
 ```python
 def is_worker_compatible(
-    task_activity: ActivityType,
-    worker_capabilities: frozenset[ActivityType]
+    task_activity: ActivityType, worker_capabilities: frozenset[ActivityType]
 ) -> bool:
     """Exact byte-for-byte canonical string match."""
     return task_activity in worker_capabilities
@@ -851,24 +958,28 @@ def is_worker_compatible(
 class TaskReadinessDecision(ABC):
     pass
 
+
 @dataclass(frozen=True, slots=True)
 class TaskReady(TaskReadinessDecision):
     resolved_input: JsonObject
+
 
 @dataclass(frozen=True, slots=True)
 class TaskNotReady(TaskReadinessDecision):
     reason: str
 
+
 @dataclass(frozen=True, slots=True)
 class TaskReadinessFault(TaskReadinessDecision):
     reason: str
+
 
 def evaluate_task_readiness(
     task_def: TaskDefinition,
     workflow_state: WorkflowState,
     task_state: TaskState,
     workflow_input: JsonValue,
-    upstream_tasks: Mapping[TaskDefinitionId, TaskExecution]
+    upstream_tasks: Mapping[TaskDefinitionId, TaskExecution],
 ) -> TaskReadinessDecision:
     if workflow_state != WorkflowState.RUNNING:
         return TaskNotReady(f"Workflow state is '{workflow_state}', must be RUNNING")
@@ -878,12 +989,16 @@ def evaluate_task_readiness(
     # 1. Verify upstream dependencies are terminal SUCCEEDED
     for dep_id in task_def.dependencies:
         if dep_id not in upstream_tasks:
-            return TaskReadinessFault(f"Missing required upstream task '{dep_id}' in state snapshot")
+            return TaskReadinessFault(
+                f"Missing required upstream task '{dep_id}' in state snapshot"
+            )
         dep_task = upstream_tasks[dep_id]
         if dep_task.state != TaskState.SUCCEEDED:
             return TaskNotReady(f"Upstream task '{dep_id}' is in state '{dep_task.state}'")
         if not isinstance(dep_task.output, OutputCommitted):
-            return TaskReadinessFault(f"Upstream task '{dep_id}' is SUCCEEDED but has uncommitted output")
+            return TaskReadinessFault(
+                f"Upstream task '{dep_id}' is SUCCEEDED but has uncommitted output"
+            )
 
     # 2. Resolve whole-value input bindings
     resolved_map: dict[str, JsonValue] = {}
@@ -906,26 +1021,34 @@ def evaluate_task_readiness(
 class RetryDecision(ABC):
     pass
 
+
 @dataclass(frozen=True, slots=True)
 class RetryAllowed(RetryDecision):
     """Signals that a retry is semantically eligible. Ordinal allocation belongs to persistence (LLD-02)."""
+
     pass
+
 
 @dataclass(frozen=True, slots=True)
 class RetryForbidden(RetryDecision):
     reason: str
 
+
 def evaluate_retry_eligibility(
     workflow_state: WorkflowState,
     used_attempts: int,
     max_attempts: int,
-    is_retryable_classification: bool
+    is_retryable_classification: bool,
 ) -> RetryDecision:
     """Engine-owned retry determination. Untrusted workers never control retryability."""
     if workflow_state != WorkflowState.RUNNING:
-        return RetryForbidden(f"Workflow state is '{workflow_state}'; retries prohibited in non-RUNNING workflows")
+        return RetryForbidden(
+            f"Workflow state is '{workflow_state}'; retries prohibited in non-RUNNING workflows"
+        )
     if not is_retryable_classification:
-        return RetryForbidden("Failure cause is classified as non-retryable by control-plane policy")
+        return RetryForbidden(
+            "Failure cause is classified as non-retryable by control-plane policy"
+        )
     if used_attempts >= max_attempts:
         return RetryForbidden(f"Attempt budget exhausted ({used_attempts} >= {max_attempts})")
 
@@ -937,7 +1060,7 @@ def evaluate_retry_eligibility(
 def resolve_workflow_output(
     output_bindings: Mapping[str, WorkflowOutputBinding],
     workflow_input: JsonValue,
-    tasks: Mapping[TaskDefinitionId, TaskExecution]
+    tasks: Mapping[TaskDefinitionId, TaskExecution],
 ) -> JsonValue:
     """
     Resolves authoritative workflow output.
@@ -976,12 +1099,14 @@ class PrincipalType(StrEnum):
     PUBLIC_CLIENT = "PUBLIC_CLIENT"
     WORKER = "WORKER"
 
+
 class PublicPermission(StrEnum):
     DEFINITIONS_READ = "definitions:read"
     DEFINITIONS_WRITE = "definitions:write"
     EXECUTIONS_READ = "executions:read"
     EXECUTIONS_START = "executions:start"
     EXECUTIONS_CANCEL = "executions:cancel"
+
 
 @dataclass(frozen=True, slots=True)
 class SecurityContext:
@@ -1006,11 +1131,13 @@ Application use cases receive typed commands and return typed DTOs:
 # Application Commands
 # =====================================================================
 
+
 @dataclass(frozen=True, slots=True)
 class RegisterDefinitionCommand:
     raw_yaml: str
     idempotency_key: IdempotencyKey | None
     security_context: SecurityContext
+
 
 @dataclass(frozen=True, slots=True)
 class StartExecutionCommand:
@@ -1019,10 +1146,12 @@ class StartExecutionCommand:
     idempotency_key: IdempotencyKey | None
     security_context: SecurityContext
 
+
 @dataclass(frozen=True, slots=True)
 class CancelExecutionCommand:
     workflow_execution_id: WorkflowExecutionId
     security_context: SecurityContext
+
 
 @dataclass(frozen=True, slots=True)
 class EstablishWorkerSessionCommand:
@@ -1031,11 +1160,13 @@ class EstablishWorkerSessionCommand:
     continuity_proof: SessionContinuityProof | None  # Required if reconnecting
     security_context: SecurityContext
 
+
 @dataclass(frozen=True, slots=True)
 class PollForCandidateCommand:
     worker_session_id: WorkerSessionId
     timeout_seconds: float
     security_context: SecurityContext
+
 
 @dataclass(frozen=True, slots=True)
 class CommitOwnershipCommand:
@@ -1043,11 +1174,13 @@ class CommitOwnershipCommand:
     worker_session_id: WorkerSessionId
     security_context: SecurityContext
 
+
 @dataclass(frozen=True, slots=True)
 class ObserveExecutionStartCommand:
     attempt_id: AttemptId
     worker_session_id: WorkerSessionId
     security_context: SecurityContext
+
 
 @dataclass(frozen=True, slots=True)
 class ProcessWorkerSuccessCommand:
@@ -1056,6 +1189,7 @@ class ProcessWorkerSuccessCommand:
     output_payload: JsonValue
     security_context: SecurityContext
 
+
 @dataclass(frozen=True, slots=True)
 class ProcessWorkerFailureCommand:
     attempt_id: AttemptId
@@ -1063,34 +1197,41 @@ class ProcessWorkerFailureCommand:
     failure_report: WorkerFailureReport  # Untrusted observation
     security_context: SecurityContext
 
+
 # =====================================================================
 # Application Results
 # =====================================================================
+
 
 @dataclass(frozen=True, slots=True)
 class DefinitionRegisteredResult:
     definition_id: DefinitionId
     workflow_name: str
 
+
 @dataclass(frozen=True, slots=True)
 class ExecutionAcceptedResult:
     workflow_execution_id: WorkflowExecutionId
     state: WorkflowState  # Returned as INITIALIZING or RUNNING
+
 
 @dataclass(frozen=True, slots=True)
 class CancellationAcceptedResult:
     workflow_execution_id: WorkflowExecutionId
     state: WorkflowState
 
+
 @dataclass(frozen=True, slots=True)
 class WorkerSessionEstablishedResult:
     worker_session_id: WorkerSessionId
     heartbeat_interval_seconds: float
 
+
 @dataclass(frozen=True, slots=True)
 class CandidateOfferedResult:
     task_execution_id: TaskExecutionId
     activity_type: ActivityType
+
 
 @dataclass(frozen=True, slots=True)
 class OwnershipCommittedResult:
@@ -1100,15 +1241,21 @@ class OwnershipCommittedResult:
     task_input: JsonObject
     start_deadline_utc: datetime
 
-@dataclass(frozen=True, slots=True)
-class CallbackSuccessResult(ABC): pass
 
 @dataclass(frozen=True, slots=True)
-class CallbackCommitted(CallbackSuccessResult): pass
+class CallbackSuccessResult(ABC):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CallbackCommitted(CallbackSuccessResult):
+    pass
+
 
 @dataclass(frozen=True, slots=True)
 class CallbackDuplicateAcknowledged(CallbackSuccessResult):
     reason: str
+
 
 @dataclass(frozen=True, slots=True)
 class OperationAcknowledgedResult:
@@ -1128,16 +1275,19 @@ from typing import Protocol
 # Transaction Result Status & Definition Persistence Outcome
 # =====================================================================
 
+
 class CommitStatus(StrEnum):
     COMMITTED = "COMMITTED"
     OCC_CONFLICT = "OCC_CONFLICT"
     PRECONDITION_FAILED = "PRECONDITION_FAILED"
     UNKNOWN_OUTCOME = "UNKNOWN_OUTCOME"
 
+
 @dataclass(frozen=True, slots=True)
 class CommitOutcome:
     status: CommitStatus
     message: str | None = None
+
 
 class RegistrationStatus(StrEnum):
     CREATED = "CREATED"
@@ -1145,15 +1295,18 @@ class RegistrationStatus(StrEnum):
     IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
     UNKNOWN_OUTCOME = "UNKNOWN_OUTCOME"
 
+
 @dataclass(frozen=True, slots=True)
 class RegistrationOutcome:
     status: RegistrationStatus
     definition_id: DefinitionId | None
     message: str | None = None
 
+
 # =====================================================================
 # Execution Mutation Port (Transactional Consistency Groups)
 # =====================================================================
+
 
 class ExecutionMutationPort(Protocol):
     """Encapsulates atomic state-mutation consistency groups."""
@@ -1162,23 +1315,19 @@ class ExecutionMutationPort(Protocol):
         self,
         execution: WorkflowExecution,
         idempotency_key: IdempotencyKey | None,
-        fingerprint: RequestFingerprint | None
+        fingerprint: RequestFingerprint | None,
     ) -> CommitOutcome:
         """Group: Workflow Creation (INITIALIZING). Records WorkflowExecutionCreated history."""
         ...
 
     async def commit_task_population(
-        self,
-        workflow_id: WorkflowExecutionId,
-        tasks: Sequence[TaskExecution]
+        self, workflow_id: WorkflowExecutionId, tasks: Sequence[TaskExecution]
     ) -> CommitOutcome:
         """Group: Task Population. Idempotently inserts PENDING tasks."""
         ...
 
     async def commit_initialization_complete(
-        self,
-        workflow_id: WorkflowExecutionId,
-        expected_revision: int
+        self, workflow_id: WorkflowExecutionId, expected_revision: int
     ) -> CommitOutcome:
         """
         Group: Initialization Complete (INITIALIZING -> RUNNING).
@@ -1191,7 +1340,7 @@ class ExecutionMutationPort(Protocol):
         task_id: TaskExecutionId,
         expected_task_revision: int,
         workflow_id: WorkflowExecutionId,
-        stable_input: JsonObject
+        stable_input: JsonObject,
     ) -> CommitOutcome:
         """
         Group: Input Readiness (PENDING -> RUNNABLE).
@@ -1204,7 +1353,7 @@ class ExecutionMutationPort(Protocol):
         task_id: TaskExecutionId,
         expected_task_revision: int,
         workflow_id: WorkflowExecutionId,
-        now_utc: datetime
+        now_utc: datetime,
     ) -> CommitOutcome:
         """
         Group: Retry Readiness (RETRY_WAIT -> RUNNABLE).
@@ -1220,7 +1369,7 @@ class ExecutionMutationPort(Protocol):
         workflow_id: WorkflowExecutionId,
         worker_session_id: WorkerSessionId,
         new_attempt_id: AttemptId,
-        start_deadline_utc: datetime
+        start_deadline_utc: datetime,
     ) -> CommitOutcome:
         """
         Group: Attempt Ownership (RUNNABLE -> RUNNING, Attempt CLAIMED).
@@ -1233,7 +1382,7 @@ class ExecutionMutationPort(Protocol):
         self,
         attempt_id: AttemptId,
         worker_session_id: WorkerSessionId,
-        expected_attempt_revision: int
+        expected_attempt_revision: int,
     ) -> CommitOutcome:
         """
         Group: Execution Start from Worker Callback.
@@ -1248,7 +1397,7 @@ class ExecutionMutationPort(Protocol):
         expected_attempt_revision: int,
         task_id: TaskExecutionId,
         expected_task_revision: int,
-        output: OutputCommitted
+        output: OutputCommitted,
     ) -> CommitOutcome:
         """
         Group: Task Success + Output from Worker Callback.
@@ -1264,7 +1413,7 @@ class ExecutionMutationPort(Protocol):
         expected_task_revision: int,
         workflow_id: WorkflowExecutionId,
         ready_at_utc: datetime,
-        attempt_cause: FailureCause
+        attempt_cause: FailureCause,
     ) -> CommitOutcome:
         """
         Group: Retry Scheduling (Attempt -> FAILED, Task -> RETRY_WAIT).
@@ -1278,41 +1427,31 @@ class ExecutionMutationPort(Protocol):
         expected_attempt_revision: int,
         task_id: TaskExecutionId,
         expected_task_revision: int,
-        terminal_cause: FailureCause
+        terminal_cause: FailureCause,
     ) -> CommitOutcome:
         """Group A: Definitive Task Failure (Attempt & Task -> FAILED)."""
         ...
 
     async def commit_internal_attempt_timeout_or_loss(
-        self,
-        attempt_id: AttemptId,
-        expected_attempt_revision: int,
-        cause: FailureCause
+        self, attempt_id: AttemptId, expected_attempt_revision: int, cause: FailureCause
     ) -> CommitOutcome:
         """Internal control-plane settlement for expired deadlines or lost worker sessions."""
         ...
 
     async def commit_workflow_failure_direction(
-        self,
-        workflow_id: WorkflowExecutionId,
-        expected_workflow_revision: int,
-        cause: FailureCause
+        self, workflow_id: WorkflowExecutionId, expected_workflow_revision: int, cause: FailureCause
     ) -> CommitOutcome:
         """Group B: Workflow Failure Direction (RUNNING -> FAILING under OCC). First direction wins."""
         ...
 
     async def commit_workflow_cancellation_direction(
-        self,
-        workflow_id: WorkflowExecutionId,
-        expected_workflow_revision: int
+        self, workflow_id: WorkflowExecutionId, expected_workflow_revision: int
     ) -> CommitOutcome:
         """Group: Workflow Cancellation Direction (INITIALIZING/RUNNING -> CANCELLING under OCC)."""
         ...
 
     async def commit_drain_task_cancellation(
-        self,
-        task_id: TaskExecutionId,
-        expected_task_revision: int
+        self, task_id: TaskExecutionId, expected_task_revision: int
     ) -> CommitOutcome:
         """Settles unstarted sibling task (PENDING, RUNNABLE, RETRY_WAIT) to CANCELLED during drain."""
         ...
@@ -1321,7 +1460,7 @@ class ExecutionMutationPort(Protocol):
         self,
         workflow_id: WorkflowExecutionId,
         expected_workflow_revision: int,
-        output: OutputCommitted
+        output: OutputCommitted,
     ) -> CommitOutcome:
         """
         Group: Workflow Success Settlement.
@@ -1330,9 +1469,7 @@ class ExecutionMutationPort(Protocol):
         ...
 
     async def commit_workflow_failure(
-        self,
-        workflow_id: WorkflowExecutionId,
-        expected_workflow_revision: int
+        self, workflow_id: WorkflowExecutionId, expected_workflow_revision: int
     ) -> CommitOutcome:
         """
         Group: Workflow Failure Settlement.
@@ -1341,9 +1478,7 @@ class ExecutionMutationPort(Protocol):
         ...
 
     async def commit_workflow_cancellation(
-        self,
-        workflow_id: WorkflowExecutionId,
-        expected_workflow_revision: int
+        self, workflow_id: WorkflowExecutionId, expected_workflow_revision: int
     ) -> CommitOutcome:
         """
         Group: Workflow Cancellation Settlement.
@@ -1360,30 +1495,41 @@ class PageParams:
     page_size: int
     cursor: str | None = None
 
+
 @dataclass(frozen=True, slots=True)
 class Page(Generic[E]):
     items: Sequence[E]
     next_cursor: str | None
 
+
 class ExecutionQueryPort(Protocol):
     """Read queries for state inspection and recovery sweeps."""
+
     async def get_workflow(self, workflow_id: WorkflowExecutionId) -> WorkflowExecution | None: ...
     async def get_task(self, task_id: TaskExecutionId) -> TaskExecution | None: ...
     async def get_attempt(self, attempt_id: AttemptId) -> ExecutionAttempt | None: ...
-    async def list_tasks_for_workflow(self, workflow_id: WorkflowExecutionId) -> Sequence[TaskExecution]: ...
+    async def list_tasks_for_workflow(
+        self, workflow_id: WorkflowExecutionId
+    ) -> Sequence[TaskExecution]: ...
     async def list_active_workflows_page(self, params: PageParams) -> Page[WorkflowExecution]: ...
     async def list_runnable_tasks_batch(self, limit: int) -> Sequence[TaskExecution]: ...
-    async def list_retry_ready_tasks_batch(self, now_utc: datetime, limit: int) -> Sequence[TaskExecution]: ...
-    async def list_expired_claimed_attempts_batch(self, now_utc: datetime, limit: int) -> Sequence[ExecutionAttempt]: ...
+    async def list_retry_ready_tasks_batch(
+        self, now_utc: datetime, limit: int
+    ) -> Sequence[TaskExecution]: ...
+    async def list_expired_claimed_attempts_batch(
+        self, now_utc: datetime, limit: int
+    ) -> Sequence[ExecutionAttempt]: ...
+
 
 class DefinitionPersistencePort(Protocol):
     """Persistence operations for immutable registered specifications."""
+
     async def register_definition_if_absent(
         self,
         definition_id: DefinitionId,
         spec: ValidatedWorkflowSpec,
         idempotency_key: IdempotencyKey | None,
-        fingerprint: RequestFingerprint | None
+        fingerprint: RequestFingerprint | None,
     ) -> RegistrationOutcome: ...
 
     async def get_definition(self, definition_id: DefinitionId) -> ValidatedWorkflowSpec | None: ...
@@ -1396,32 +1542,49 @@ class DefinitionPersistencePort(Protocol):
 ```python
 class Clock(Protocol):
     """Abstract clock for deterministic time testing."""
+
     def now_utc(self) -> datetime:
         """Returns the current timezone-aware UTC datetime. Must raise ValueError if naive."""
         ...
 
+
 class RandomSource(Protocol):
     """Abstract random provider for deterministic jitter calculation."""
+
     def uniform(self, a: float, b: float) -> float: ...
+
 
 class WorkerSessionRegistryPort(Protocol):
     """In-process ephemeral worker session registry."""
-    def register_new_session(self, capabilities: frozenset[ActivityType], now_utc: datetime) -> WorkerSessionId: ...
-    def reconnect_session(self, session_id: WorkerSessionId, proof: SessionContinuityProof, now_utc: datetime) -> bool: ...
+
+    def register_new_session(
+        self, capabilities: frozenset[ActivityType], now_utc: datetime
+    ) -> WorkerSessionId: ...
+    def reconnect_session(
+        self, session_id: WorkerSessionId, proof: SessionContinuityProof, now_utc: datetime
+    ) -> bool: ...
     def record_heartbeat(self, session_id: WorkerSessionId, now_utc: datetime) -> bool: ...
     def set_accepting_new_work(self, session_id: WorkerSessionId, accepting: bool) -> bool: ...
     def get_session(self, session_id: WorkerSessionId) -> WorkerSession | None: ...
     def evict_session(self, session_id: WorkerSessionId) -> None: ...
     def list_live_sessions(self, now_utc: datetime) -> Sequence[WorkerSession]: ...
 
+
 class WorkerTransportPort(Protocol):
     """Abstract communication boundary for dispatching notices (e.g., best-effort cancel notices)."""
-    async def send_cancellation_notice(self, worker_session_id: WorkerSessionId, attempt_id: AttemptId) -> bool: ...
+
+    async def send_cancellation_notice(
+        self, worker_session_id: WorkerSessionId, attempt_id: AttemptId
+    ) -> bool: ...
+
 
 class TelemetryPort(Protocol):
     """Non-authoritative, fail-open diagnostics port for structured events and span recording."""
+
     def record_span(self, name: str, attributes: Mapping[str, str]) -> None: ...
-    def increment_counter(self, name: str, value: int = 1, labels: Mapping[str, str] | None = None) -> None: ...
+    def increment_counter(
+        self, name: str, value: int = 1, labels: Mapping[str, str] | None = None
+    ) -> None: ...
 ```
 
 ---

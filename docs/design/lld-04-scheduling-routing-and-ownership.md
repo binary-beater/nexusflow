@@ -225,6 +225,7 @@ from nexusflow.domain.values import (
     JsonObject,
 )
 
+
 class ReadinessReason(StrEnum):
     READY = "READY"
     WORKFLOW_NOT_RUNNING = "WORKFLOW_NOT_RUNNING"
@@ -234,12 +235,14 @@ class ReadinessReason(StrEnum):
     OUTPUT_NOT_AVAILABLE = "OUTPUT_NOT_AVAILABLE"
     INPUT_RESOLUTION_CORRUPT = "INPUT_RESOLUTION_CORRUPT"
 
+
 @dataclass(frozen=True, slots=True)
 class DependencyStateSnapshot:
     task_definition_id: TaskDefinitionId
     state: str  # "PENDING", "RUNNABLE", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"
     has_output: bool
     output_value: JsonValue | None
+
 
 @dataclass(frozen=True, slots=True)
 class TaskReadinessSnapshot:
@@ -253,12 +256,14 @@ class TaskReadinessSnapshot:
     task_definition: TaskDefinition
     upstream_dependencies: Mapping[TaskDefinitionId, DependencyStateSnapshot]
 
+
 @dataclass(frozen=True, slots=True)
 class ReadinessDecision:
     ready: bool
     resolved_input: JsonObject | None
     reason: ReadinessReason
     diagnostic_message: str = ""
+
 
 def evaluate_task_readiness(snapshot: TaskReadinessSnapshot) -> ReadinessDecision:
     """
@@ -383,11 +388,13 @@ from nexusflow.domain.values import (
     WorkflowExecutionId,
 )
 
+
 class SchedulerWakeup(Protocol):
     """
     Ephemeral asynchronous signal bus for scheduler notifications.
     Implementations use bounded, coalescing asyncio.Queue structures.
     """
+
     async def notify_workflow_started(self, workflow_id: WorkflowExecutionId) -> None:
         """Emitted when WorkflowExecution transitions INITIALIZING -> RUNNING."""
         ...
@@ -431,10 +438,12 @@ from datetime import datetime
 from typing import Protocol, Sequence
 from nexusflow.domain.values import TaskExecutionId
 
+
 @dataclass(frozen=True, slots=True)
 class KeysetCursor:
     sort_time: datetime
     id_val: TaskExecutionId
+
 
 class DefensiveRediscoveryPort(Protocol):
     async def sweep_pending_readiness_candidates(
@@ -518,6 +527,7 @@ from nexusflow.domain.values import (
     TaskExecutionId,
 )
 
+
 @dataclass(frozen=True, slots=True)
 class WorkerSessionSnapshot:
     session_id: WorkerSessionId
@@ -526,15 +536,15 @@ class WorkerSessionSnapshot:
     live: bool
     accepting_new_work: bool
 
+
 class WorkerRegistryView(Protocol):
-    def get_session(self, session_id: WorkerSessionId) -> WorkerSessionSnapshot | None:
-        ...
+    def get_session(self, session_id: WorkerSessionId) -> WorkerSessionSnapshot | None: ...
 
-    def get_all_sessions(self) -> Mapping[WorkerSessionId, WorkerSessionSnapshot]:
-        ...
+    def get_all_sessions(self) -> Mapping[WorkerSessionId, WorkerSessionSnapshot]: ...
 
-    def get_compatible_sessions(self, activity_type: ActivityType) -> Sequence[WorkerSessionSnapshot]:
-        ...
+    def get_compatible_sessions(
+        self, activity_type: ActivityType
+    ) -> Sequence[WorkerSessionSnapshot]: ...
 ```
 
 ### 6.3 Routing Compatibility Invariants
@@ -574,7 +584,9 @@ def find_compatible_candidates(
     candidates: list[RoutingCandidate] = []
     for s in sessions:
         if s.live and s.accepting_new_work and (required_activity in s.capabilities):
-            candidates.append(RoutingCandidate(task_execution_id=task_id, worker_session_id=s.session_id))
+            candidates.append(
+                RoutingCandidate(task_execution_id=task_id, worker_session_id=s.session_id)
+            )
     return tuple(candidates)
 ```
 
@@ -594,6 +606,7 @@ ADR-009 intentionally keeps the candidate selection algorithm pluggable. LLD-04 
 ```python
 from typing import Protocol, Sequence
 
+
 @dataclass(frozen=True, slots=True)
 class RunnableTaskSnapshot:
     workflow_id: WorkflowExecutionId
@@ -605,16 +618,17 @@ class RunnableTaskSnapshot:
     next_attempt_ordinal: int
     max_attempts: int
 
+
 class CandidateSelector(Protocol):
     """
     Strategy interface for picking a single candidate from a compatible set.
     """
+
     def choose(
         self,
         task: RunnableTaskSnapshot,
         candidates: Sequence[RoutingCandidate],
-    ) -> RoutingCandidate | None:
-        ...
+    ) -> RoutingCandidate | None: ...
 ```
 
 ### 7.1 Simple V1 Deterministic Round-Robin Selector
@@ -626,6 +640,7 @@ class RoundRobinCandidateSelector:
     Deterministic round-robin candidate selector across live sessions.
     Maintains an in-memory cursor per ActivityType.
     """
+
     def __init__(self) -> None:
         self._cursors: dict[str, int] = {}
 
@@ -751,6 +766,7 @@ from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from enum import StrEnum
 
+
 class OwnershipOutcomeStatus(StrEnum):
     ACQUIRED = "ACQUIRED"
     NO_COMPATIBLE_WORKER = "NO_COMPATIBLE_WORKER"
@@ -762,12 +778,14 @@ class OwnershipOutcomeStatus(StrEnum):
     UNKNOWN_RECONCILED_COMMITTED = "UNKNOWN_RECONCILED_COMMITTED"
     TRANSIENT_DB_FAILURE = "TRANSIENT_DB_FAILURE"
 
+
 @dataclass(frozen=True, slots=True)
 class DispatchInstruction:
     """
     Authoritative instruction produced only AFTER durable ownership commit.
     Delivered to LLD-05 worker HTTP communication layer.
     """
+
     attempt_id: AttemptId
     attempt_ordinal: int
     task_execution_id: TaskExecutionId
@@ -777,17 +795,20 @@ class DispatchInstruction:
     stable_input: JsonObject
     start_deadline_utc: datetime
 
+
 @dataclass(frozen=True, slots=True)
 class OwnershipResult:
     status: OwnershipOutcomeStatus
     instruction: DispatchInstruction | None = None
     diagnostic_message: str = ""
 
+
 class OwnershipCoordinator:
     """
     Coordinates candidate selection, immediate revalidation, lifecycle checks,
     and LLD-02 ownership commit.
     """
+
     def __init__(
         self,
         registry_view: WorkerRegistryView,
@@ -816,7 +837,9 @@ class OwnershipCoordinator:
 
         # Step 2: Compatibility match against live worker registry
         compatible_sessions = self._registry.get_compatible_sessions(task.activity_type)
-        candidates = find_compatible_candidates(task.task_execution_id, task.activity_type, compatible_sessions)
+        candidates = find_compatible_candidates(
+            task.task_execution_id, task.activity_type, compatible_sessions
+        )
         if not candidates:
             return OwnershipResult(
                 status=OwnershipOutcomeStatus.NO_COMPATIBLE_WORKER,
@@ -908,7 +931,9 @@ class OwnershipCoordinator:
                     reconciled.task_execution_id != task.task_execution_id
                     or reconciled.worker_session_id != selected.worker_session_id
                 ):
-                    raise SchedulingIntegrityError(f"Reconciled attempt '{new_attempt_id}' contradicts target bindings.")
+                    raise SchedulingIntegrityError(
+                        f"Reconciled attempt '{new_attempt_id}' contradicts target bindings."
+                    )
 
                 # Reconstruct instruction strictly from durable facts
                 instruction = DispatchInstruction(
@@ -921,8 +946,11 @@ class OwnershipCoordinator:
                     stable_input=task.stable_input,
                     start_deadline_utc=reconciled.start_deadline_utc,
                 )
-                return OwnershipResult(status=OwnershipOutcomeStatus.UNKNOWN_RECONCILED_COMMITTED, instruction=instruction)
-            
+                return OwnershipResult(
+                    status=OwnershipOutcomeStatus.UNKNOWN_RECONCILED_COMMITTED,
+                    instruction=instruction,
+                )
+
             # Absent attempt: Re-read durable task state
             task_row = await self._persistence.get_task_snapshot(task.task_execution_id)
             if task_row is not None and task_row.state == "RUNNABLE":
@@ -977,6 +1005,7 @@ from nexusflow.domain.values import (
     WorkflowExecutionId,
     TaskDefinitionId,
 )
+
 
 class SchedulingReadPort(Protocol):
     async def load_readiness_snapshot(

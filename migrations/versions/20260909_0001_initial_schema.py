@@ -5,6 +5,7 @@ Revises: None
 Create Date: 2026-09-09 12:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -27,7 +28,9 @@ def upgrade() -> None:
         sa.Column("raw_yaml", sa.Text(), nullable=True),
         sa.Column("created_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("definition_id"),
-        sa.CheckConstraint("length(trim(workflow_name)) > 0", name="chk_definitions_name_non_empty"),
+        sa.CheckConstraint(
+            "length(trim(workflow_name)) > 0", name="chk_definitions_name_non_empty"
+        ),
     )
 
     # 2. workflow_executions
@@ -46,7 +49,9 @@ def upgrade() -> None:
         sa.Column("failure_details", postgresql.JSONB(none_as_null=False), nullable=True),
         sa.Column("created_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("updated_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["definition_id"], ["registered_definitions.definition_id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["definition_id"], ["registered_definitions.definition_id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("workflow_execution_id"),
         sa.CheckConstraint(
             "state IN ('INITIALIZING', 'RUNNING', 'FAILING', 'CANCELLING', 'SUCCEEDED', 'FAILED', 'CANCELLED')",
@@ -94,9 +99,15 @@ def upgrade() -> None:
         sa.Column("failure_details", postgresql.JSONB(none_as_null=False), nullable=True),
         sa.Column("created_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("updated_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["workflow_execution_id"], ["workflow_executions.workflow_execution_id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["workflow_execution_id"],
+            ["workflow_executions.workflow_execution_id"],
+            ondelete="RESTRICT",
+        ),
         sa.PrimaryKeyConstraint("task_execution_id"),
-        sa.UniqueConstraint("workflow_execution_id", "task_definition_id", name="uq_task_definition_per_workflow"),
+        sa.UniqueConstraint(
+            "workflow_execution_id", "task_definition_id", name="uq_task_definition_per_workflow"
+        ),
         sa.CheckConstraint(
             "state IN ('PENDING', 'RUNNABLE', 'RUNNING', 'RETRY_WAIT', 'SUCCEEDED', 'FAILED', 'CANCELLED')",
             name="chk_task_state",
@@ -116,8 +127,13 @@ def upgrade() -> None:
             "(has_output = FALSE AND task_output IS NULL) OR (has_output = TRUE AND task_output IS NOT NULL)",
             name="chk_task_output_consistency",
         ),
-        sa.CheckConstraint("state != 'SUCCEEDED' OR (has_output = TRUE)", name="chk_task_terminal_success"),
-        sa.CheckConstraint("state != 'RETRY_WAIT' OR retry_ready_at_utc IS NOT NULL", name="chk_task_retry_wait_deadline"),
+        sa.CheckConstraint(
+            "state != 'SUCCEEDED' OR (has_output = TRUE)", name="chk_task_terminal_success"
+        ),
+        sa.CheckConstraint(
+            "state != 'RETRY_WAIT' OR retry_ready_at_utc IS NOT NULL",
+            name="chk_task_retry_wait_deadline",
+        ),
     )
     op.create_index("idx_task_executions_workflow_id", "task_executions", ["workflow_execution_id"])
     op.create_index(
@@ -151,9 +167,13 @@ def upgrade() -> None:
         sa.Column("failure_details", postgresql.JSONB(none_as_null=False), nullable=True),
         sa.Column("created_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("updated_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["task_execution_id"], ["task_executions.task_execution_id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["task_execution_id"], ["task_executions.task_execution_id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("attempt_id"),
-        sa.UniqueConstraint("task_execution_id", "attempt_ordinal", name="uq_attempt_ordinal_per_task"),
+        sa.UniqueConstraint(
+            "task_execution_id", "attempt_ordinal", name="uq_attempt_ordinal_per_task"
+        ),
         sa.CheckConstraint(
             "state IN ('CLAIMED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')",
             name="chk_attempt_state",
@@ -203,9 +223,17 @@ def upgrade() -> None:
         sa.Column("event_category", sa.Text(), nullable=False),
         sa.Column("event_payload", postgresql.JSONB(none_as_null=False), nullable=False),
         sa.Column("occurred_at_utc", sa.TIMESTAMP(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["workflow_execution_id"], ["workflow_executions.workflow_execution_id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["task_execution_id"], ["task_executions.task_execution_id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["attempt_id"], ["execution_attempts.attempt_id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["workflow_execution_id"],
+            ["workflow_executions.workflow_execution_id"],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["task_execution_id"], ["task_executions.task_execution_id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["attempt_id"], ["execution_attempts.attempt_id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("history_id"),
     )
     op.create_index(
@@ -227,7 +255,9 @@ def upgrade() -> None:
             "operation_type IN ('REGISTER_DEFINITION', 'START_EXECUTION')",
             name="chk_idempotency_op_type",
         ),
-        sa.CheckConstraint("length(request_fingerprint) = 64", name="chk_idempotency_fingerprint_len"),
+        sa.CheckConstraint(
+            "length(request_fingerprint) = 64", name="chk_idempotency_fingerprint_len"
+        ),
     )
 
 

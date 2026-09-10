@@ -57,7 +57,9 @@ async def run_continuous_workload(
     num_workflows: int = 350,
 ) -> dict:
     total_tasks = num_workflows * 3
-    print(f"\n>>> Launching Continuous Workload: {num_workflows} workflows ({total_tasks} durable tasks) <<<")
+    print(
+        f"\n>>> Launching Continuous Workload: {num_workflows} workflows ({total_tasks} durable tasks) <<<"
+    )
 
     start_wall = time.perf_counter()
     start_dt_utc = datetime.now(UTC)
@@ -82,7 +84,9 @@ async def run_continuous_workload(
     wf_per_sec = num_workflows / elapsed_s
     tasks_per_sec = total_tasks / elapsed_s
 
-    print(f"Completed in {elapsed_s:.2f}s | Throughput: {tasks_per_sec:.2f} tasks/sec ({wf_per_sec:.2f} wf/sec)")
+    print(
+        f"Completed in {elapsed_s:.2f}s | Throughput: {tasks_per_sec:.2f} tasks/sec ({wf_per_sec:.2f} wf/sec)"
+    )
 
     # Post-Benchmark Authoritative PostgreSQL Integrity Check
     async with session_maker() as s:
@@ -107,22 +111,30 @@ async def run_continuous_workload(
         # Compute True Ownership Latencies:
         # Moment Task became RUNNABLE -> Moment Attempt CLAIMED committed
         runnables = (
-            await s.execute(
-                select(HistoryEntryRecord).where(
-                    HistoryEntryRecord.event_category == "TaskMarkedRunnable",
-                    HistoryEntryRecord.occurred_at_utc >= start_dt_utc,
+            (
+                await s.execute(
+                    select(HistoryEntryRecord).where(
+                        HistoryEntryRecord.event_category == "TaskMarkedRunnable",
+                        HistoryEntryRecord.occurred_at_utc >= start_dt_utc,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         claimed = (
-            await s.execute(
-                select(HistoryEntryRecord).where(
-                    HistoryEntryRecord.event_category == "TaskClaimedByWorker",
-                    HistoryEntryRecord.occurred_at_utc >= start_dt_utc,
+            (
+                await s.execute(
+                    select(HistoryEntryRecord).where(
+                        HistoryEntryRecord.event_category == "TaskClaimedByWorker",
+                        HistoryEntryRecord.occurred_at_utc >= start_dt_utc,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         c_map = {c.task_execution_id: c.occurred_at_utc for c in claimed}
         latencies_ms = []
@@ -168,7 +180,7 @@ async def run_continuous_workload(
 
 
 async def run_single_benchmark_run(run_idx: int, num_workflows: int = 350) -> dict:
-    print(f"\n{'='*30} STARTING BENCHMARK RUN {run_idx} {'='*30}")
+    print(f"\n{'=' * 30} STARTING BENCHMARK RUN {run_idx} {'=' * 30}")
     engine = create_async_engine(POSTGRES_URL, echo=False)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     registry = WorkerRegistry(liveness_timeout_seconds=3600.0)
@@ -190,7 +202,9 @@ async def run_single_benchmark_run(run_idx: int, num_workflows: int = 350) -> di
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yaml_path = Path("examples/workflows/02_pipeline_happy_path.yaml")
         yaml_content = yaml_path.read_text(encoding="utf-8")
-        def_resp = await client.post("/v1/definitions", headers=HEADERS, json={"yaml_content": yaml_content})
+        def_resp = await client.post(
+            "/v1/definitions", headers=HEADERS, json={"yaml_content": yaml_content}
+        )
         assert def_resp.status_code == 201, f"Def registration failed: {def_resp.text}"
         def_id = def_resp.json()["definition_id"]
 
@@ -256,10 +270,14 @@ async def main():
     means = [r["latency_stats"]["mean_ms"] for r in runs]
 
     print("\n" + "=" * 80)
-    print(f"EXTENDED BENCHMARK MULTI-RUN SUMMARY ({num_workflows} Workflows / {num_workflows*3} Tasks per run)")
+    print(
+        f"EXTENDED BENCHMARK MULTI-RUN SUMMARY ({num_workflows} Workflows / {num_workflows * 3} Tasks per run)"
+    )
     print("=" * 80)
     for i, r in enumerate(runs, 1):
-        print(f"Run {i}: {r['tasks_per_sec']:.2f} tasks/sec | {r['wf_per_sec']:.2f} wf/sec | p50: {r['latency_stats']['p50_ms']:.2f} ms | p95: {r['latency_stats']['p95_ms']:.2f} ms")
+        print(
+            f"Run {i}: {r['tasks_per_sec']:.2f} tasks/sec | {r['wf_per_sec']:.2f} wf/sec | p50: {r['latency_stats']['p50_ms']:.2f} ms | p95: {r['latency_stats']['p95_ms']:.2f} ms"
+        )
 
     median_task_thru = statistics.median(tasks_per_secs)
     median_wf_thru = statistics.median(wf_per_secs)
@@ -269,9 +287,15 @@ async def main():
     median_mean = statistics.median(means)
 
     print("-" * 80)
-    print(f"Median Task Throughput:     {median_task_thru:.2f} tasks/sec (range: {min(tasks_per_secs):.2f} - {max(tasks_per_secs):.2f})")
-    print(f"Median Workflow Throughput: {median_wf_thru:.2f} wf/sec (range: {min(wf_per_secs):.2f} - {max(wf_per_secs):.2f})")
-    print(f"Median Ownership Latency:   p50 = {median_p50:.2f} ms | p95 = {median_p95:.2f} ms | p99 = {median_p99:.2f} ms | mean = {median_mean:.2f} ms")
+    print(
+        f"Median Task Throughput:     {median_task_thru:.2f} tasks/sec (range: {min(tasks_per_secs):.2f} - {max(tasks_per_secs):.2f})"
+    )
+    print(
+        f"Median Workflow Throughput: {median_wf_thru:.2f} wf/sec (range: {min(wf_per_secs):.2f} - {max(wf_per_secs):.2f})"
+    )
+    print(
+        f"Median Ownership Latency:   p50 = {median_p50:.2f} ms | p95 = {median_p95:.2f} ms | p99 = {median_p99:.2f} ms | mean = {median_mean:.2f} ms"
+    )
     print("=" * 80)
 
     # Save artifacts

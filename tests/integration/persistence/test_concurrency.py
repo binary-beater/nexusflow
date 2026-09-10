@@ -45,7 +45,9 @@ async def session_factory():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_attempt_ownership_occ_race(session_factory: async_sessionmaker[AsyncSession]):
+async def test_concurrent_attempt_ownership_occ_race(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Tests that two concurrent workers claiming the same RUNNABLE task resolve via OCC.
 
     Exactly one worker commits the claim; the second receives OCC_CONFLICT with zero rows updated.

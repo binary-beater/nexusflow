@@ -19,7 +19,9 @@ from nexusflow.orchestration.scheduler import ExecutionScheduler
 from nexusflow.persistence.orm import ExecutionAttemptRecord
 from nexusflow.worker.runtime import NexusFlowWorker, WorkerRuntimeConfig
 
-POSTGRES_TEST_URL = "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+POSTGRES_TEST_URL = (
+    "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+)
 
 
 @pytest.fixture
@@ -56,7 +58,10 @@ async def e2e_context():
 async def test_e2e_retry_to_success(e2e_context):
     """Scenario 1: Task fails on attempt 1 with transient error, enters RETRY_WAIT, gets retried, and succeeds on attempt 2."""
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     # 1. Register definition with max_attempts: 2
     yaml_content = """
@@ -162,7 +167,10 @@ output_bindings:
 async def test_e2e_cancellation_lifecycle(e2e_context):
     """Scenario 4: Workflow cancellation triggers cooperative cancellation and terminates CANCELLED."""
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     yaml_content = """
 workflow_name: cancel_pipeline
@@ -225,7 +233,10 @@ async def test_e2e_retry_exhaustion(e2e_context):
     - WorkflowExecution FAILING -> FAILED
     """
     client: AsyncClient = e2e_context["client"]
-    public_headers = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
+    public_headers = {
+        "Authorization": "Bearer dev-secret-token",
+        "Content-Type": "application/json",
+    }
 
     yaml_content = """
 workflow_name: retry_exhaustion_pipeline
@@ -278,6 +289,7 @@ output_bindings: {}
 
     # Advance scheduler to drain workflow
     from nexusflow.domain.identifiers import WorkflowExecutionId
+
     await e2e_context["scheduler"].drain_workflow(WorkflowExecutionId(wf_id))
 
     # Verify workflow is FAILED
@@ -297,8 +309,8 @@ output_bindings: {}
     async with e2e_context["session_maker"]() as session:
         att_count = await session.scalar(
             select(func.count(ExecutionAttemptRecord.attempt_id)).where(
-                ExecutionAttemptRecord.task_execution_id == tasks_by_name["failing_step"]["task_execution_id"]
+                ExecutionAttemptRecord.task_execution_id
+                == tasks_by_name["failing_step"]["task_execution_id"]
             )
         )
         assert att_count == 1
-

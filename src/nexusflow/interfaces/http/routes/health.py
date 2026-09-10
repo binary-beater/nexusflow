@@ -36,17 +36,29 @@ async def readyz(
         await session.execute(text("SELECT count(*) FROM registered_definitions;"))
     except Exception as exc:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unavailable", "code": "DB_UNAVAILABLE", "reason": f"Database unreachable or unmigrated: {exc}"}
+        return {
+            "status": "unavailable",
+            "code": "DB_UNAVAILABLE",
+            "reason": f"Database unreachable or unmigrated: {exc}",
+        }
 
     # 2. Verify RecoveryGate allows work
     if not gate.allows_new_work():
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unavailable", "code": "NOT_READY", "reason": "Recovery not yet converged"}
+        return {
+            "status": "unavailable",
+            "code": "NOT_READY",
+            "reason": "Recovery not yet converged",
+        }
 
     # 3. Verify critical Phase-2 runtime / scheduler availability
     if scheduler is None:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unavailable", "code": "RUNTIME_UNHEALTHY", "reason": "Scheduler runtime unavailable"}
+        return {
+            "status": "unavailable",
+            "code": "RUNTIME_UNHEALTHY",
+            "reason": "Scheduler runtime unavailable",
+        }
 
     return {"status": "ready"}
 
@@ -55,5 +67,5 @@ async def readyz(
 async def metrics() -> Response:
     """Prometheus exposition endpoint according to LLD-09 Section 10.2."""
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

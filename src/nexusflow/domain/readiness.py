@@ -151,7 +151,9 @@ def resolve_workflow_outputs(
         if not isinstance(binding, WorkflowTaskOutputBinding):
             raise TypeError(f"Unsupported workflow output binding type: {type(binding)}")
         if binding.source_task_id not in task_outputs:
-            raise KeyError(f"Workflow output source task '{binding.source_task_id}' not found in task outputs.")
+            raise KeyError(
+                f"Workflow output source task '{binding.source_task_id}' not found in task outputs."
+            )
         result[name] = task_outputs[binding.source_task_id]
 
     return MappingProxyType(result)

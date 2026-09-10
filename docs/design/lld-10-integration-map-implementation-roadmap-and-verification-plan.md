@@ -681,6 +681,7 @@ from typing import Callable, Any, Coroutine
 
 logger = logging.getLogger("nexusflow.worker")
 
+
 class ActivityRegistry:
     def __init__(self):
         self._activities: dict[str, Callable[[Any], Coroutine[Any, Any, Any]]] = {}
@@ -689,6 +690,7 @@ class ActivityRegistry:
         def decorator(func: Callable[[Any], Coroutine[Any, Any, Any]]):
             self._activities[name] = func
             return func
+
         return decorator
 
     def get(self, name: str):
@@ -698,36 +700,43 @@ class ActivityRegistry:
     def capabilities(self) -> list[str]:
         return list(self._activities.keys())
 
+
 registry = ActivityRegistry()
+
 
 @registry.activity("extract_tokens")
 async def extract_tokens(inp: Any) -> Any:
     text = str(inp) if inp is not None else ""
     return text.split()
 
+
 @registry.activity("transform_tokens")
 async def transform_tokens(inp: Any) -> Any:
     tokens = inp if isinstance(inp, list) else []
     return f"Processed {len(tokens)} tokens successfully."
+
 
 @registry.activity("persist_summary")
 async def persist_summary(inp: Any) -> Any:
     logger.info("Persisting summary: %s", inp)
     return {"result_id": "doc_res_9981"}
 
+
 class NexusFlowWorkerAgent:
     def __init__(self, base_url: str, token: str, worker_id: str):
-        self.client = httpx.AsyncClient(base_url=base_url, headers={"Authorization": f"Bearer {token}"}, timeout=45.0)
+        self.client = httpx.AsyncClient(
+            base_url=base_url, headers={"Authorization": f"Bearer {token}"}, timeout=45.0
+        )
         self.worker_id = worker_id
         self.session_id: str | None = None
         self.running = True
 
     async def run(self):
         # 1. Register Worker Session
-        reg_resp = await self.client.post("/internal/v1/worker/register", json={
-            "worker_id": self.worker_id,
-            "capabilities": registry.capabilities
-        })
+        reg_resp = await self.client.post(
+            "/internal/v1/worker/register",
+            json={"worker_id": self.worker_id, "capabilities": registry.capabilities},
+        )
         reg_resp.raise_for_status()
         self.session_id = reg_resp.json()["worker_session_id"]
         logger.info("Registered worker session: %s", self.session_id)
@@ -738,10 +747,10 @@ class NexusFlowWorkerAgent:
         # 3. Long-Poll Work Loop
         while self.running:
             try:
-                poll_resp = await self.client.post("/internal/v1/worker/poll", json={
-                    "worker_session_id": self.session_id,
-                    "max_tasks": 1
-                })
+                poll_resp = await self.client.post(
+                    "/internal/v1/worker/poll",
+                    json={"worker_session_id": self.session_id, "max_tasks": 1},
+                )
                 if poll_resp.status_code == 204:
                     continue
 
@@ -757,10 +766,10 @@ class NexusFlowWorkerAgent:
         task_input = assignment["task_input"]
 
         # Acknowledge Start
-        ack_resp = await self.client.post("/internal/v1/worker/start_ack", json={
-            "worker_session_id": self.session_id,
-            "attempt_id": attempt_id
-        })
+        ack_resp = await self.client.post(
+            "/internal/v1/worker/start_ack",
+            json={"worker_session_id": self.session_id, "attempt_id": attempt_id},
+        )
         if ack_resp.status_code != 200:
             logger.warning("Start ack rejected for attempt %s; skipping execution.", attempt_id)
             return
@@ -769,29 +778,35 @@ class NexusFlowWorkerAgent:
         func = registry.get(activity_type)
         try:
             output = await func(task_input)
-            await self.client.post("/internal/v1/worker/callback", json={
-                "worker_session_id": self.session_id,
-                "attempt_id": attempt_id,
-                "status": "SUCCEEDED",
-                "output": output
-            })
+            await self.client.post(
+                "/internal/v1/worker/callback",
+                json={
+                    "worker_session_id": self.session_id,
+                    "attempt_id": attempt_id,
+                    "status": "SUCCEEDED",
+                    "output": output,
+                },
+            )
             logger.info("Successfully completed attempt %s", attempt_id)
         except Exception as exc:
-            await self.client.post("/internal/v1/worker/callback", json={
-                "worker_session_id": self.session_id,
-                "attempt_id": attempt_id,
-                "status": "FAILED",
-                "failure_category": "ACTIVITY_EXECUTION_ERROR",
-                "error_message": str(exc)
-            })
+            await self.client.post(
+                "/internal/v1/worker/callback",
+                json={
+                    "worker_session_id": self.session_id,
+                    "attempt_id": attempt_id,
+                    "status": "FAILED",
+                    "failure_category": "ACTIVITY_EXECUTION_ERROR",
+                    "error_message": str(exc),
+                },
+            )
 
     async def _heartbeat_loop(self):
         while self.running:
             await asyncio.sleep(5.0)
             try:
-                await self.client.post("/internal/v1/worker/heartbeat", json={
-                    "worker_session_id": self.session_id
-                })
+                await self.client.post(
+                    "/internal/v1/worker/heartbeat", json={"worker_session_id": self.session_id}
+                )
             except Exception:
                 pass
 ```

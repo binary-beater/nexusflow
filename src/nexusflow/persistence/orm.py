@@ -69,8 +69,18 @@ class WorkflowExecutionRecord(Base):
             "state != 'SUCCEEDED' OR (has_output = TRUE)",
             name="chk_workflow_terminal_success",
         ),
-        Index("idx_workflow_executions_state_created", "state", "created_at_utc", "workflow_execution_id"),
-        Index("idx_workflow_executions_definition", "definition_id", "created_at_utc", "workflow_execution_id"),
+        Index(
+            "idx_workflow_executions_state_created",
+            "state",
+            "created_at_utc",
+            "workflow_execution_id",
+        ),
+        Index(
+            "idx_workflow_executions_definition",
+            "definition_id",
+            "created_at_utc",
+            "workflow_execution_id",
+        ),
     )
 
 
@@ -100,7 +110,9 @@ class TaskExecutionRecord(Base):
     updated_at_utc: Mapped[datetime] = mapped_column(TIMESTAMP_TYPE, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("workflow_execution_id", "task_definition_id", name="uq_task_definition_per_workflow"),
+        UniqueConstraint(
+            "workflow_execution_id", "task_definition_id", name="uq_task_definition_per_workflow"
+        ),
         CheckConstraint(
             "state IN ('PENDING', 'RUNNABLE', 'RUNNING', 'RETRY_WAIT', 'SUCCEEDED', 'FAILED', 'CANCELLED')",
             name="chk_task_state",
@@ -116,7 +128,9 @@ class TaskExecutionRecord(Base):
             "(has_output = FALSE AND task_output IS NULL) OR (has_output = TRUE AND task_output IS NOT NULL)",
             name="chk_task_output_consistency",
         ),
-        CheckConstraint("state != 'SUCCEEDED' OR (has_output = TRUE)", name="chk_task_terminal_success"),
+        CheckConstraint(
+            "state != 'SUCCEEDED' OR (has_output = TRUE)", name="chk_task_terminal_success"
+        ),
         Index("idx_task_executions_workflow_id", "workflow_execution_id"),
         Index(
             "idx_task_executions_runnable_rediscovery",
@@ -147,7 +161,9 @@ class ExecutionAttemptRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     start_deadline_utc: Mapped[datetime] = mapped_column(TIMESTAMP_TYPE, nullable=False)
     execution_timeout_utc: Mapped[datetime | None] = mapped_column(TIMESTAMP_TYPE, nullable=True)
-    cancellation_deadline_utc: Mapped[datetime | None] = mapped_column(TIMESTAMP_TYPE, nullable=True)
+    cancellation_deadline_utc: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP_TYPE, nullable=True
+    )
     failure_category: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -156,7 +172,9 @@ class ExecutionAttemptRecord(Base):
     updated_at_utc: Mapped[datetime] = mapped_column(TIMESTAMP_TYPE, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("task_execution_id", "attempt_ordinal", name="uq_attempt_ordinal_per_task"),
+        UniqueConstraint(
+            "task_execution_id", "attempt_ordinal", name="uq_attempt_ordinal_per_task"
+        ),
         CheckConstraint(
             "state IN ('CLAIMED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')",
             name="chk_attempt_state",
@@ -216,7 +234,12 @@ class HistoryEntryRecord(Base):
     occurred_at_utc: Mapped[datetime] = mapped_column(TIMESTAMP_TYPE, nullable=False)
 
     __table_args__ = (
-        Index("idx_history_entries_pagination", "workflow_execution_id", "occurred_at_utc", "history_id"),
+        Index(
+            "idx_history_entries_pagination",
+            "workflow_execution_id",
+            "occurred_at_utc",
+            "history_id",
+        ),
     )
 
 
@@ -230,6 +253,9 @@ class IdempotencyRecord(Base):
     created_at_utc: Mapped[datetime] = mapped_column(TIMESTAMP_TYPE, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("operation_type IN ('REGISTER_DEFINITION', 'START_EXECUTION')", name="chk_idempotency_op_type"),
+        CheckConstraint(
+            "operation_type IN ('REGISTER_DEFINITION', 'START_EXECUTION')",
+            name="chk_idempotency_op_type",
+        ),
         CheckConstraint("length(request_fingerprint) = 64", name="chk_idempotency_fingerprint_len"),
     )

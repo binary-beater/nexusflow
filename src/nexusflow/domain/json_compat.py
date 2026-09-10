@@ -10,6 +10,7 @@ type JsonArray = tuple["JsonValue", ...]
 type JsonObject = Mapping[str, "JsonValue"]
 type JsonValue = JsonPrimitive | JsonArray | JsonObject
 
+
 def freeze_json(value: Any) -> JsonValue:
     """Recursively canonicalizes and deeply freezes an arbitrary JSON-compatible structure
 
@@ -40,6 +41,7 @@ def freeze_json(value: Any) -> JsonValue:
         return MappingProxyType(frozen_dict)
     else:
         raise TypeError(f"Type {type(value).__name__} is not JSON-compatible.")
+
 
 def thaw_json(val: Any) -> Any:
     """Recursively converts frozen domain JSON into mutable dict/list for DB/API serialization.

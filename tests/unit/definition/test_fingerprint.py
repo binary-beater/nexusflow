@@ -28,8 +28,12 @@ tasks:
 
 # Trailing comment
 """
-    res_1 = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_1))))
-    res_2 = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_2))))
+    res_1 = SemanticValidator().validate(
+        normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_1)))
+    )
+    res_2 = SemanticValidator().validate(
+        normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_2)))
+    )
     assert res_1.success is not None
     assert res_2.success is not None
 
@@ -60,8 +64,12 @@ tasks:
     dependencies: []
     max_attempts: 3
 """
-    res_1 = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_1))))
-    res_2 = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_2))))
+    res_1 = SemanticValidator().validate(
+        normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_1)))
+    )
+    res_2 = SemanticValidator().validate(
+        normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_2)))
+    )
     assert res_1.success is not None
     assert res_2.success is not None
 

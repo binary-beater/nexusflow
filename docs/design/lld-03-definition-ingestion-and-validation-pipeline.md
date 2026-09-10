@@ -115,6 +115,7 @@ The `ruamel.yaml.YAML` parser is configured with absolute restrictions:
 from ruamel.yaml import YAML
 from ruamel.yaml.nodes import MappingNode, SequenceNode, ScalarNode, Node
 
+
 def create_safe_yaml_parser() -> YAML:
     """
     Constructs a hardened, pure-Python safe ruamel.yaml parser.
@@ -133,9 +134,12 @@ In `ruamel.yaml`, composed nodes represent YAML anchors via the `anchor` attribu
 ```python
 from ruamel.yaml.nodes import Node, MappingNode, SequenceNode
 
+
 class YamlComplexityError(Exception):
     """Raised when YAML structure exceeds operational safety thresholds."""
+
     pass
+
 
 def enforce_yaml_ast_complexity(
     node: Node,
@@ -162,11 +166,15 @@ def enforce_yaml_ast_complexity(
         if not allow_aliases:
             # Check for anchor declaration (e.g., &base)
             if getattr(current_node, "anchor", None) is not None:
-                raise YamlComplexityError("YAML anchors and aliases are prohibited in workflow definitions.")
+                raise YamlComplexityError(
+                    "YAML anchors and aliases are prohibited in workflow definitions."
+                )
             # Check for AliasNode type or alias marker (e.g., *base)
             node_type_name = type(current_node).__name__
             if "Alias" in node_type_name or getattr(current_node, "is_alias", False):
-                raise YamlComplexityError("YAML anchors and aliases are prohibited in workflow definitions.")
+                raise YamlComplexityError(
+                    "YAML anchors and aliases are prohibited in workflow definitions."
+                )
 
         if isinstance(current_node, MappingNode):
             for key_node, value_node in current_node.value:
@@ -233,6 +241,7 @@ JsonArray: TypeAlias = tuple["JsonValue", ...]
 JsonObject: TypeAlias = Mapping[str, "JsonValue"]
 JsonValue: TypeAlias = Union[JsonPrimitive, JsonArray, JsonObject]
 
+
 def freeze_json(value: object) -> JsonValue:
     """
     Recursively canonicalizes and deeply freezes an arbitrary JSON-compatible structure
@@ -258,11 +267,15 @@ def freeze_json(value: object) -> JsonValue:
         frozen_map: dict[str, JsonValue] = {}
         for k, v in value.items():
             if not isinstance(k, str):
-                raise TypeError(f"Illegal non-string mapping key '{k}' of type '{type(k).__name__}'.")
+                raise TypeError(
+                    f"Illegal non-string mapping key '{k}' of type '{type(k).__name__}'."
+                )
             frozen_map[k] = freeze_json(v)
         return MappingProxyType(frozen_map)
     else:
-        raise TypeError(f"Object of type '{type(value).__name__}' is not JSON-compatible: {value!r}")
+        raise TypeError(
+            f"Object of type '{type(value).__name__}' is not JSON-compatible: {value!r}"
+        )
 ```
 
 ### 4.4 Thawing Domain JSON: `thaw_json`
@@ -271,11 +284,12 @@ To serialize frozen domain JSON into PostgreSQL persistence, NexusFlow reuses th
 ```python
 from typing import Any
 
+
 def thaw_json(val: Any) -> Any:
     """
     Recursively converts frozen domain JSON (tuples, MappingProxyType) into
     ordinary mutable JSON-native Python structures (list, dict with string keys).
-    
+
     Fails closed: strictly rejects non-string keys and non-finite floats (NaN/Infinity).
     Never converts non-string keys to strings via str(k).
     """
@@ -351,6 +365,7 @@ External boundary models parse incoming dictionaries from the YAML loader. All m
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class StrictBaseModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -358,18 +373,23 @@ class StrictBaseModel(BaseModel):
         strict=True,
     )
 
+
 # --- Input Binding External DTOs ---
+
 
 class LiteralBindingDTO(StrictBaseModel):
     type: Literal["literal"]
     value: object  # Must validate against JSON value semantics
 
+
 class WorkflowInputBindingDTO(StrictBaseModel):
     type: Literal["workflow_input"]
+
 
 class TaskOutputBindingDTO(StrictBaseModel):
     type: Literal["task_output"]
     task: str
+
 
 InputBindingDTO = Annotated[
     Union[LiteralBindingDTO, WorkflowInputBindingDTO, TaskOutputBindingDTO],
@@ -378,20 +398,24 @@ InputBindingDTO = Annotated[
 
 # --- Workflow Output Binding External DTOs (Frozen V1 Baseline) ---
 
+
 class WorkflowTaskOutputBindingDTO(StrictBaseModel):
     type: Literal["task_output"]
     task: str
+
 
 # Only the frozen V1 workflow output source family is permitted
 WorkflowOutputBindingDTO = WorkflowTaskOutputBindingDTO
 
 # --- Task & Workflow External DTOs ---
 
+
 class TaskDefinitionDTO(StrictBaseModel):
     activity_type: str
     dependencies: list[str] = Field(default_factory=list)
     input_bindings: dict[str, InputBindingDTO] = Field(default_factory=dict)
     max_attempts: int  # Explicitly required: no unapproved default
+
 
 class WorkflowDefinitionDTO(StrictBaseModel):
     workflow_name: str
@@ -456,6 +480,7 @@ from nexusflow.domain.definitions.bindings import (
 from nexusflow.domain.definitions.task_definition import TaskDefinition
 from nexusflow.domain.values import TaskDefinitionId
 
+
 @dataclass(frozen=True, slots=True)
 class CandidateWorkflowSpec:
     """
@@ -463,10 +488,12 @@ class CandidateWorkflowSpec:
     Preserves raw user dependency declarations (including duplicates, self-references,
     empty tasks, and invalid IDs) so the semantic validator can produce accurate diagnostics.
     """
+
     workflow_name: str
     tasks: Sequence[TaskDefinition]
     raw_dependencies: Mapping[TaskDefinitionId, tuple[str, ...]]
     output_bindings: Mapping[str, WorkflowTaskOutputBinding]
+
 
 @dataclass(frozen=True, slots=True)
 class ValidatedWorkflowSpec:
@@ -475,6 +502,7 @@ class ValidatedWorkflowSpec:
     Guaranteed by ADR-004 to represent an acyclic DAG with all dependencies,
     activity types, and whole-value bindings verified.
     """
+
     workflow_name: str
     tasks: Mapping[TaskDefinitionId, TaskDefinition]
     output_bindings: Mapping[str, WorkflowTaskOutputBinding]
@@ -541,9 +569,10 @@ class CanonicalGraph:
     Sparse bidirectional adjacency DAG derived from task and dependency declarations.
     All collections are deeply immutable.
     """
+
     nodes: frozenset[TaskDefinitionId]
     dependencies: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Incoming: B -> {A}
-    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]    # Outgoing: A -> {B}
+    dependents: Mapping[TaskDefinitionId, frozenset[TaskDefinitionId]]  # Outgoing: A -> {B}
 
     def get_upstream_dependencies(self, task_id: TaskDefinitionId) -> frozenset[TaskDefinitionId]:
         return self.dependencies.get(task_id, frozenset())
@@ -567,6 +596,7 @@ NexusFlow strictly separates:
 ```python
 from collections import deque
 
+
 def build_canonical_graph_and_verify_acyclic(
     tasks: Mapping[TaskDefinitionId, TaskDefinition],
 ) -> tuple[CanonicalGraph, list[str]]:
@@ -585,7 +615,9 @@ def build_canonical_graph_and_verify_acyclic(
     for task_id, task in tasks.items():
         for dep_id in task.dependencies:
             if dep_id not in nodes:
-                raise ValueError(f"Precondition violated: dependency '{dep_id}' not found in tasks.")
+                raise ValueError(
+                    f"Precondition violated: dependency '{dep_id}' not found in tasks."
+                )
             dependencies[task_id].add(dep_id)
             dependents[dep_id].add(task_id)
             in_degree[task_id] += 1
@@ -613,9 +645,12 @@ def build_canonical_graph_and_verify_acyclic(
     # Step 4: Detect cycle presence in O(V)
     if visited_count != len(nodes):
         cycle_nodes = sorted([t.value for t in nodes if in_degree[t] > 0])
-        return canonical_graph, [f"Graph contains a cycle involving tasks: {', '.join(cycle_nodes)}"]
+        return canonical_graph, [
+            f"Graph contains a cycle involving tasks: {', '.join(cycle_nodes)}"
+        ]
 
     return canonical_graph, []
+
 
 def compute_deterministic_topological_order(
     graph: CanonicalGraph,
@@ -627,7 +662,7 @@ def compute_deterministic_topological_order(
     in_degree: dict[TaskDefinitionId, int] = {
         t: len(graph.get_upstream_dependencies(t)) for t in graph.nodes
     }
-    
+
     # Priority queue / sorted deque for deterministic evaluation
     queue: deque[TaskDefinitionId] = deque(
         sorted([t for t in graph.nodes if in_degree[t] == 0], key=lambda x: x.value)
@@ -657,6 +692,7 @@ from typing import Mapping, TypeAlias
 
 JsonObject: TypeAlias = Mapping[str, JsonValue]
 
+
 class DefinitionValidationCode(StrEnum):
     # Structural Errors (ADR-002)
     PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
@@ -679,6 +715,7 @@ class DefinitionValidationCode(StrEnum):
     UNKNOWN_WORKFLOW_OUTPUT_SOURCE = "UNKNOWN_WORKFLOW_OUTPUT_SOURCE"
     CYCLE_DETECTED = "CYCLE_DETECTED"
     ATTEMPTS_EXCEEDED_LIMIT = "ATTEMPTS_EXCEEDED_LIMIT"
+
 
 @dataclass(frozen=True, slots=True)
 class DefinitionValidationError:
@@ -726,16 +763,19 @@ class ValidatedDefinitionResult:
     spec: ValidatedWorkflowSpec
     graph: CanonicalGraph
 
+
 @dataclass(frozen=True, slots=True)
 class ValidationOutcome:
     success: ValidatedDefinitionResult | None
     errors: tuple[DefinitionValidationError, ...]
+
 
 class SemanticValidator:
     """
     Pure in-memory semantic validator implementing ADR-004.
     Accumulates errors across non-dependent checks up to max_errors.
     """
+
     def __init__(
         self,
         max_attempts_admission_limit: int = 100,  # Provisional V1 operational limit (LLD-09)
@@ -890,6 +930,7 @@ from typing import Any
 
 from nexusflow.domain.values import RequestFingerprint
 
+
 def compute_registration_fingerprint(normalized_dto_dict: dict[str, Any]) -> RequestFingerprint:
     """
     Computes a deterministic SHA-256 RequestFingerprint from normalized definition DTOs.
@@ -927,6 +968,7 @@ from nexusflow.domain.definitions.bindings import (
     WorkflowTaskOutputBinding,
 )
 from nexusflow.domain.definitions.validated import ValidatedWorkflowSpec
+
 
 def serialize_validated_spec(spec: ValidatedWorkflowSpec) -> dict[str, Any]:
     """
@@ -984,7 +1026,9 @@ Engine recovery loads `validated_iws` directly from PostgreSQL. To protect the r
 ```python
 class PersistenceIntegrityError(Exception):
     """Raised when persisted specification in the database violates integrity invariants."""
+
     pass
+
 
 def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
     """
@@ -995,7 +1039,9 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
     try:
         # Rule 1: Root container shape verification
         if not isinstance(data, (dict, Mapping)):
-            raise PersistenceIntegrityError(f"Root durable spec must be a mapping, got {type(data).__name__}.")
+            raise PersistenceIntegrityError(
+                f"Root durable spec must be a mapping, got {type(data).__name__}."
+            )
 
         wf_name = data.get("workflow_name")
         if not isinstance(wf_name, str) or not wf_name:
@@ -1003,74 +1049,106 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
 
         raw_tasks = data.get("tasks")
         if not isinstance(raw_tasks, (dict, Mapping)):
-            raise PersistenceIntegrityError(f"'tasks' must be a mapping, got {type(raw_tasks).__name__}.")
+            raise PersistenceIntegrityError(
+                f"'tasks' must be a mapping, got {type(raw_tasks).__name__}."
+            )
         if not raw_tasks:
             raise PersistenceIntegrityError("Durable specification has 0 tasks.")
 
         raw_outputs = data.get("output_bindings", {})
         if not isinstance(raw_outputs, (dict, Mapping)):
-            raise PersistenceIntegrityError(f"'output_bindings' must be a mapping, got {type(raw_outputs).__name__}.")
+            raise PersistenceIntegrityError(
+                f"'output_bindings' must be a mapping, got {type(raw_outputs).__name__}."
+            )
 
         task_id_set: set[TaskDefinitionId] = set()
         for t_key in raw_tasks.keys():
             if not isinstance(t_key, str) or not t_key:
-                raise PersistenceIntegrityError(f"Task key must be a non-empty string, got {t_key!r}.")
+                raise PersistenceIntegrityError(
+                    f"Task key must be a non-empty string, got {t_key!r}."
+                )
             task_id_set.add(TaskDefinitionId(t_key))
 
         tasks: dict[TaskDefinitionId, TaskDefinition] = {}
         for t_id_str, t_data in raw_tasks.items():
             if not isinstance(t_data, (dict, Mapping)):
-                raise PersistenceIntegrityError(f"Task payload for '{t_id_str}' must be a mapping, got {type(t_data).__name__}.")
+                raise PersistenceIntegrityError(
+                    f"Task payload for '{t_id_str}' must be a mapping, got {type(t_data).__name__}."
+                )
 
             t_id = TaskDefinitionId(t_id_str)
             if "id" in t_data:
                 if not isinstance(t_data["id"], str) or t_data["id"] != t_id_str:
-                    raise PersistenceIntegrityError(f"Task map key '{t_id_str}' mismatches embedded id '{t_data.get('id')}'.")
+                    raise PersistenceIntegrityError(
+                        f"Task map key '{t_id_str}' mismatches embedded id '{t_data.get('id')}'."
+                    )
 
             raw_act_type = t_data.get("activity_type")
             if not isinstance(raw_act_type, str) or not raw_act_type:
-                raise PersistenceIntegrityError(f"Task '{t_id_str}' missing valid string 'activity_type'.")
+                raise PersistenceIntegrityError(
+                    f"Task '{t_id_str}' missing valid string 'activity_type'."
+                )
             act_type = ActivityType(raw_act_type)
 
             # Strict dependencies container verification (no string masquerading as list)
             raw_deps = t_data.get("dependencies", [])
             if not isinstance(raw_deps, list):
-                raise PersistenceIntegrityError(f"Task '{t_id_str}' dependencies must be a list, got {type(raw_deps).__name__}.")
+                raise PersistenceIntegrityError(
+                    f"Task '{t_id_str}' dependencies must be a list, got {type(raw_deps).__name__}."
+                )
 
             deps_set = set()
             for d in raw_deps:
                 if not isinstance(d, str):
-                    raise PersistenceIntegrityError(f"Task '{t_id_str}' dependency item must be string, got {type(d).__name__}.")
+                    raise PersistenceIntegrityError(
+                        f"Task '{t_id_str}' dependency item must be string, got {type(d).__name__}."
+                    )
                 dep_id = TaskDefinitionId(d)
                 if dep_id in deps_set:
-                    raise PersistenceIntegrityError(f"Task '{t_id_str}' contains duplicate stored dependency '{d}'.")
+                    raise PersistenceIntegrityError(
+                        f"Task '{t_id_str}' contains duplicate stored dependency '{d}'."
+                    )
                 if dep_id == t_id:
-                    raise PersistenceIntegrityError(f"Task '{t_id_str}' contains stored self-dependency.")
+                    raise PersistenceIntegrityError(
+                        f"Task '{t_id_str}' contains stored self-dependency."
+                    )
                 if dep_id not in task_id_set:
-                    raise PersistenceIntegrityError(f"Task '{t_id_str}' references unknown stored dependency '{d}'.")
+                    raise PersistenceIntegrityError(
+                        f"Task '{t_id_str}' references unknown stored dependency '{d}'."
+                    )
                 deps_set.add(dep_id)
 
             # Strict max_attempts decoding: must be exact int, NOT bool, >= 1
             raw_max_attempts = t_data.get("max_attempts")
-            if type(raw_max_attempts) is not int:  # type(...) is not int rejects bool (bool is subclass of int)
+            if (
+                type(raw_max_attempts) is not int
+            ):  # type(...) is not int rejects bool (bool is subclass of int)
                 raise PersistenceIntegrityError(
                     f"Task '{t_id_str}' max_attempts must be exact integer, got {type(raw_max_attempts).__name__} ({raw_max_attempts!r})."
                 )
             if raw_max_attempts < 1:
-                raise PersistenceIntegrityError(f"Task '{t_id_str}' has invalid stored max_attempts {raw_max_attempts} (< 1).")
+                raise PersistenceIntegrityError(
+                    f"Task '{t_id_str}' has invalid stored max_attempts {raw_max_attempts} (< 1)."
+                )
             max_attempts = raw_max_attempts
 
             # Strict input bindings container verification
             raw_in_bindings = t_data.get("input_bindings", {})
             if not isinstance(raw_in_bindings, (dict, Mapping)):
-                raise PersistenceIntegrityError(f"Task '{t_id_str}' input_bindings must be a mapping, got {type(raw_in_bindings).__name__}.")
+                raise PersistenceIntegrityError(
+                    f"Task '{t_id_str}' input_bindings must be a mapping, got {type(raw_in_bindings).__name__}."
+                )
 
             in_bindings: dict[str, InputBinding] = {}
             for in_k, in_v in raw_in_bindings.items():
                 if not isinstance(in_k, str):
-                    raise PersistenceIntegrityError(f"Binding key must be string, got {type(in_k).__name__}.")
+                    raise PersistenceIntegrityError(
+                        f"Binding key must be string, got {type(in_k).__name__}."
+                    )
                 if not isinstance(in_v, (dict, Mapping)):
-                    raise PersistenceIntegrityError(f"Binding value for '{in_k}' must be a mapping, got {type(in_v).__name__}.")
+                    raise PersistenceIntegrityError(
+                        f"Binding value for '{in_k}' must be a mapping, got {type(in_v).__name__}."
+                    )
 
                 b_type = in_v.get("type")
                 if not isinstance(b_type, str):
@@ -1078,7 +1156,9 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
 
                 if b_type == "Literal":
                     if "value" not in in_v:
-                        raise PersistenceIntegrityError(f"Literal binding '{in_k}' missing 'value'.")
+                        raise PersistenceIntegrityError(
+                            f"Literal binding '{in_k}' missing 'value'."
+                        )
                     # Re-freeze literal value into domain immutable representation
                     in_bindings[in_k] = LiteralBinding(value=freeze_json(in_v["value"]))
                 elif b_type == "WorkflowInput":
@@ -1086,12 +1166,18 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
                 elif b_type == "TaskOutput":
                     upstream_str = in_v.get("upstream_task_id")
                     if not isinstance(upstream_str, str):
-                        raise PersistenceIntegrityError(f"TaskOutput binding '{in_k}' missing string 'upstream_task_id'.")
+                        raise PersistenceIntegrityError(
+                            f"TaskOutput binding '{in_k}' missing string 'upstream_task_id'."
+                        )
                     upstream_id = TaskDefinitionId(upstream_str)
                     if upstream_id not in task_id_set:
-                        raise PersistenceIntegrityError(f"TaskOutput references unknown stored task '{upstream_id.value}'.")
+                        raise PersistenceIntegrityError(
+                            f"TaskOutput references unknown stored task '{upstream_id.value}'."
+                        )
                     if upstream_id not in deps_set:
-                        raise PersistenceIntegrityError(f"TaskOutput source '{upstream_id.value}' is not a stored dependency.")
+                        raise PersistenceIntegrityError(
+                            f"TaskOutput source '{upstream_id.value}' is not a stored dependency."
+                        )
                     in_bindings[in_k] = TaskOutputBinding(upstream_task_id=upstream_id)
                 else:
                     raise PersistenceIntegrityError(f"Corrupt stored binding type '{b_type}'.")
@@ -1108,18 +1194,26 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
         outputs: dict[str, WorkflowTaskOutputBinding] = {}
         for o_k, o_v in raw_outputs.items():
             if not isinstance(o_k, str):
-                raise PersistenceIntegrityError(f"Output binding key must be string, got {type(o_k).__name__}.")
+                raise PersistenceIntegrityError(
+                    f"Output binding key must be string, got {type(o_k).__name__}."
+                )
             if not isinstance(o_v, (dict, Mapping)):
-                raise PersistenceIntegrityError(f"Output binding value for '{o_k}' must be a mapping, got {type(o_v).__name__}.")
+                raise PersistenceIntegrityError(
+                    f"Output binding value for '{o_k}' must be a mapping, got {type(o_v).__name__}."
+                )
 
             ob_type = o_v.get("type")
             if ob_type == "WorkflowTaskOutput":
                 src_str = o_v.get("source_task_id")
                 if not isinstance(src_str, str):
-                    raise PersistenceIntegrityError(f"Output binding '{o_k}' missing string 'source_task_id'.")
+                    raise PersistenceIntegrityError(
+                        f"Output binding '{o_k}' missing string 'source_task_id'."
+                    )
                 src_id = TaskDefinitionId(src_str)
                 if src_id not in task_id_set:
-                    raise PersistenceIntegrityError(f"Stored workflow output references unknown task '{src_id.value}'.")
+                    raise PersistenceIntegrityError(
+                        f"Stored workflow output references unknown task '{src_id.value}'."
+                    )
                 outputs[o_k] = WorkflowTaskOutputBinding(source_task_id=src_id)
             else:
                 raise PersistenceIntegrityError(f"Corrupt stored workflow output type '{ob_type}'.")
@@ -1127,7 +1221,9 @@ def deserialize_validated_spec(data: Any) -> ValidatedWorkflowSpec:
         # Verify graph acyclicity on stored tasks strictly in O(V+E)
         _, cycle_errors = build_canonical_graph_and_verify_acyclic(tasks)
         if cycle_errors:
-            raise PersistenceIntegrityError(f"Corrupt stored specification contains cycles: {cycle_errors}")
+            raise PersistenceIntegrityError(
+                f"Corrupt stored specification contains cycles: {cycle_errors}"
+            )
 
         return ValidatedWorkflowSpec(
             workflow_name=wf_name,
@@ -1159,6 +1255,7 @@ from nexusflow.domain.values import (
 )
 from nexusflow.domain.ports.definition_persistence import DefinitionPersistencePort, CommitStatus
 
+
 class RegistrationOutcomeStatus(StrEnum):
     CREATED = "CREATED"
     IDEMPOTENT_MATCH = "IDEMPOTENT_MATCH"
@@ -1167,10 +1264,12 @@ class RegistrationOutcomeStatus(StrEnum):
     IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
     PERSISTENCE_FAILURE = "PERSISTENCE_FAILURE"
 
+
 @dataclass(frozen=True, slots=True)
 class RegisterDefinitionCommand:
     raw_yaml: str
     idempotency_key: IdempotencyKey | None
+
 
 @dataclass(frozen=True, slots=True)
 class RegisterDefinitionResult:
@@ -1178,11 +1277,13 @@ class RegisterDefinitionResult:
     definition_id: DefinitionId | None = None
     errors: tuple[DefinitionValidationError, ...] = ()
 
+
 class RegisterDefinitionUseCase:
     """
     Coordinates safe parsing, structural normalization, semantic validation,
     request fingerprinting, and LLD-02 persistence invocation.
     """
+
     def __init__(
         self,
         parser: DefinitionParser,

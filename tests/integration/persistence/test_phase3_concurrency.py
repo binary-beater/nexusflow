@@ -66,7 +66,9 @@ async def session_factory():
 
 
 @pytest.mark.asyncio
-async def test_race_late_worker_success_vs_timeout_settlement(session_factory: async_sessionmaker[AsyncSession]):
+async def test_race_late_worker_success_vs_timeout_settlement(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Tests the race between a late worker SUCCESS callback and an engine EXECUTION_TIMEOUT sweep.
 
     Exactly one transaction must commit; the loser must receive OCC conflict or stale attempt.
@@ -152,7 +154,9 @@ async def test_race_late_worker_success_vs_timeout_settlement(session_factory: a
 
     async def timeout_sweep_txn():
         await barrier.wait()
-        cause = FailureCause(category=FailureCategory.TIME_BASED, code="EXECUTION_TIMEOUT", message="Timed out")
+        cause = FailureCause(
+            category=FailureCategory.TIME_BASED, code="EXECUTION_TIMEOUT", message="Timed out"
+        )
         async with session_factory() as sess:
             outcome, _, _ = await commit_internal_attempt_failure(
                 session=sess,
@@ -178,7 +182,9 @@ async def test_race_late_worker_success_vs_timeout_settlement(session_factory: a
 
 
 @pytest.mark.asyncio
-async def test_race_workflow_cancellation_vs_task_definitive_failure(session_factory: async_sessionmaker[AsyncSession]):
+async def test_race_workflow_cancellation_vs_task_definitive_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Tests the race between public Cancel request and definitive task failure entering workflow direction.
 
     Narrow FOR UPDATE row lock serializes the direction:
@@ -224,7 +230,9 @@ async def test_race_workflow_cancellation_vs_task_definitive_failure(session_fac
 
     async def failure_direction_txn():
         await barrier.wait()
-        cause = FailureCause(category=FailureCategory.DOMAIN_EXECUTION, code="FATAL", message="Fatal")
+        cause = FailureCause(
+            category=FailureCategory.DOMAIN_EXECUTION, code="FATAL", message="Fatal"
+        )
         async with session_factory() as sess:
             return await commit_workflow_failure_direction(
                 session=sess,
@@ -323,7 +331,9 @@ async def test_race_success_vs_worker_loss(session_factory: async_sessionmaker[A
 
     async def worker_loss_txn():
         await barrier.wait()
-        cause = FailureCause(category=FailureCategory.WORKER_AVAILABILITY, code="WORKER_LOSS", message="Lost")
+        cause = FailureCause(
+            category=FailureCategory.WORKER_AVAILABILITY, code="WORKER_LOSS", message="Lost"
+        )
         async with session_factory() as sess:
             outcome, _, _ = await commit_internal_attempt_failure(
                 session=sess,
@@ -429,7 +439,9 @@ async def test_race_success_vs_failure_callback(session_factory: async_sessionma
 
     async def fail_cb():
         await barrier.wait()
-        cause = FailureCause(category=FailureCategory.DOMAIN_EXECUTION, code="STEP_FAILED", message="Failed")
+        cause = FailureCause(
+            category=FailureCategory.DOMAIN_EXECUTION, code="STEP_FAILED", message="Failed"
+        )
         async with session_factory() as sess:
             outcome, _ = await commit_worker_definitive_failure(
                 session=sess,
@@ -535,7 +547,9 @@ async def test_race_retry_ready_vs_cancellation(session_factory: async_sessionma
 
 
 @pytest.mark.asyncio
-async def test_race_late_callback_vs_recovery_settlement(session_factory: async_sessionmaker[AsyncSession]):
+async def test_race_late_callback_vs_recovery_settlement(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Tests the race between a late callback for a historical session and startup recovery worker-loss settlement."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -616,7 +630,11 @@ async def test_race_late_callback_vs_recovery_settlement(session_factory: async_
 
     async def recovery_settlement_txn():
         await barrier.wait()
-        cause = FailureCause(category=FailureCategory.WORKER_AVAILABILITY, code="WORKER_LOSS", message="Lost on reboot")
+        cause = FailureCause(
+            category=FailureCategory.WORKER_AVAILABILITY,
+            code="WORKER_LOSS",
+            message="Lost on reboot",
+        )
         async with session_factory() as sess:
             outcome, _, _ = await commit_internal_attempt_failure(
                 session=sess,
@@ -639,4 +657,3 @@ async def test_race_late_callback_vs_recovery_settlement(session_factory: async_
     # Exactly one commits, loser receives OCC conflict
     assert len(successes) == 1
     assert len(conflicts) == 1
-

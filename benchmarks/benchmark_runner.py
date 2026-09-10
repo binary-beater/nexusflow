@@ -42,15 +42,21 @@ from nexusflow.persistence.orm import (
 )
 from nexusflow.worker.runtime import NexusFlowWorker, WorkerRuntimeConfig
 
-POSTGRES_TEST_URL = "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+POSTGRES_TEST_URL = (
+    "postgresql+asyncpg://nexusflow_user:nexusflow_password@localhost:5432/nexusflow"
+)
 PUBLIC_HEADERS = {"Authorization": "Bearer dev-secret-token", "Content-Type": "application/json"}
 
 
 async def run_workload_a(client: AsyncClient, num_workflows: int = 50):
-    print(f"\n--- Workload A: Throughput Benchmark ({num_workflows} workflows, 3-stage pipeline = {num_workflows * 3} tasks) ---")
+    print(
+        f"\n--- Workload A: Throughput Benchmark ({num_workflows} workflows, 3-stage pipeline = {num_workflows * 3} tasks) ---"
+    )
     yaml_path = Path("examples/workflows/02_pipeline_happy_path.yaml")
     yaml_content = yaml_path.read_text(encoding="utf-8")
-    def_resp = await client.post("/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content})
+    def_resp = await client.post(
+        "/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content}
+    )
     assert def_resp.status_code == 201
     def_id = def_resp.json()["definition_id"]
 
@@ -108,8 +114,12 @@ async def run_workload_a(client: AsyncClient, num_workflows: int = 50):
 
 
 async def run_workload_b(client: AsyncClient, samples: int = 50):
-    print(f"\n--- Workload B: End-to-End Task Invocation & Claim Latency Percentiles ({samples} samples) ---")
-    print("    Note: Measures round-trip from client POST /v1/executions through worker poll & attempt claim commit.")
+    print(
+        f"\n--- Workload B: End-to-End Task Invocation & Claim Latency Percentiles ({samples} samples) ---"
+    )
+    print(
+        "    Note: Measures round-trip from client POST /v1/executions through worker poll & attempt claim commit."
+    )
     yaml_content = """
 workflow_name: bench_latency
 tasks:
@@ -122,7 +132,9 @@ output_bindings:
     type: task_output
     task: task_lat
 """
-    def_resp = await client.post("/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content})
+    def_resp = await client.post(
+        "/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content}
+    )
     assert def_resp.status_code == 201
     def_id = def_resp.json()["definition_id"]
 
@@ -169,7 +181,9 @@ output_bindings:
     return {"p50_ms": p50, "p95_ms": p95, "p99_ms": p99}
 
 
-async def run_workload_c(client: AsyncClient, session_maker: async_sessionmaker, num_failures: int = 30):
+async def run_workload_c(
+    client: AsyncClient, session_maker: async_sessionmaker, num_failures: int = 30
+):
     print(f"\n--- Workload C: Retry & Failure Load Handling ({num_failures} transient retries) ---")
     yaml_content = """
 workflow_name: bench_retry
@@ -183,7 +197,9 @@ output_bindings:
     type: task_output
     task: retry_step
 """
-    def_resp = await client.post("/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content})
+    def_resp = await client.post(
+        "/v1/definitions", headers=PUBLIC_HEADERS, json={"yaml_content": yaml_content}
+    )
     assert def_resp.status_code == 201
     def_id = def_resp.json()["definition_id"]
 
@@ -222,14 +238,18 @@ output_bindings:
     t1 = time.perf_counter()
     elapsed = t1 - t0
     ops_sec = num_failures / elapsed
-    print(f"Processed {num_failures} retry-enabled workflows in {elapsed:.3f}s ({ops_sec:.2f} workflows/sec)")
+    print(
+        f"Processed {num_failures} retry-enabled workflows in {elapsed:.3f}s ({ops_sec:.2f} workflows/sec)"
+    )
 
     await worker.stop()
     return {"elapsed_s": elapsed, "retries_per_sec": ops_sec}
 
 
 async def run_workload_d(session_maker: async_sessionmaker, num_workflows: int = 40):
-    print(f"\n--- Workload D: Crash Recovery Reconciliation Throughput ({num_workflows} interrupted workflows) ---")
+    print(
+        f"\n--- Workload D: Crash Recovery Reconciliation Throughput ({num_workflows} interrupted workflows) ---"
+    )
     registry = WorkerRegistry()
     scheduler = ExecutionScheduler(session_factory=session_maker, worker_registry=registry)
     engine = StartupRecoveryEngine(session_maker, scheduler, registry)
@@ -347,4 +367,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

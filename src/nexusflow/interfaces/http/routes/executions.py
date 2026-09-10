@@ -182,7 +182,9 @@ async def start_execution(
         )
     )
     if wf_record is None:
-        raise ApiHttpException(status_code=500, code="INTERNAL_ERROR", message="Workflow record disappeared.")
+        raise ApiHttpException(
+            status_code=500, code="INTERNAL_ERROR", message="Workflow record disappeared."
+        )
 
     return ExecutionResponseDTO(
         workflow_execution_id=wf_record.workflow_execution_id,
@@ -233,12 +235,16 @@ async def list_tasks(
 ) -> list[TaskExecutionResponseDTO]:
     """Lists all task executions for a workflow."""
     records = (
-        await session.execute(
-            select(TaskExecutionRecord).where(
-                TaskExecutionRecord.workflow_execution_id == workflow_id
+        (
+            await session.execute(
+                select(TaskExecutionRecord).where(
+                    TaskExecutionRecord.workflow_execution_id == workflow_id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     result: list[TaskExecutionResponseDTO] = []
     for r in records:
@@ -276,13 +282,19 @@ async def list_history(
 ) -> list[HistoryEntryResponseDTO]:
     """Retrieves immutable audit history for a workflow ordered by (occurred_at_utc, history_id)."""
     records = (
-        await session.execute(
-            select(HistoryEntryRecord)
-            .where(HistoryEntryRecord.workflow_execution_id == workflow_id)
-            .order_by(HistoryEntryRecord.occurred_at_utc.asc(), HistoryEntryRecord.history_id.asc())
-            .limit(limit)
+        (
+            await session.execute(
+                select(HistoryEntryRecord)
+                .where(HistoryEntryRecord.workflow_execution_id == workflow_id)
+                .order_by(
+                    HistoryEntryRecord.occurred_at_utc.asc(), HistoryEntryRecord.history_id.asc()
+                )
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return [
         HistoryEntryResponseDTO(
@@ -298,7 +310,11 @@ async def list_history(
     ]
 
 
-@router.post("/{workflow_id}/cancel", status_code=status.HTTP_202_ACCEPTED, response_model=ExecutionResponseDTO)
+@router.post(
+    "/{workflow_id}/cancel",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ExecutionResponseDTO,
+)
 async def cancel_execution(
     workflow_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -382,7 +398,9 @@ async def cancel_execution(
         )
     )
     if wf_updated is None:
-        raise ApiHttpException(status_code=500, code="INTERNAL_ERROR", message="Workflow record disappeared.")
+        raise ApiHttpException(
+            status_code=500, code="INTERNAL_ERROR", message="Workflow record disappeared."
+        )
 
     return ExecutionResponseDTO(
         workflow_execution_id=wf_updated.workflow_execution_id,

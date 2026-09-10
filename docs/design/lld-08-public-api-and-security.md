@@ -272,7 +272,7 @@ Under LLD-01, LLD-02, and LLD-03, semantic equivalence is validated using a cryp
       sort_keys=True,
       separators=(",", ":"),
       ensure_ascii=False,
-      allow_nan=False
+      allow_nan=False,
   ).encode("utf-8")
   RequestFingerprint = hashlib.sha256(canonical_bytes).hexdigest()
   ```
@@ -284,7 +284,7 @@ Under LLD-01, LLD-02, and LLD-03, semantic equivalence is validated using a cryp
       sort_keys=True,
       separators=(",", ":"),
       ensure_ascii=False,
-      allow_nan=False
+      allow_nan=False,
   ).encode("utf-8")
   RequestFingerprint = hashlib.sha256(canonical_bytes).hexdigest()
   ```
@@ -426,14 +426,17 @@ NexusFlow uses explicit permissions without complex dynamic RBAC trees:
 ### 12.1 Endpoint Permission Enforcement
 ```python
 def require_permission(required: PublicPermission):
-    async def dependency(ctx: SecurityContext = Depends(get_public_security_context)) -> SecurityContext:
+    async def dependency(
+        ctx: SecurityContext = Depends(get_public_security_context),
+    ) -> SecurityContext:
         if not ctx.has_permission(required):
             raise ApiHttpException(
                 status_code=403,
                 code="FORBIDDEN",
-                message="Principal lacks required permission for this operation."
+                message="Principal lacks required permission for this operation.",
             )
         return ctx
+
     return dependency
 ```
 
@@ -465,9 +468,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 from typing import Any
 
+
 class RegisterDefinitionJsonDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     yaml_content: str = Field(..., min_length=1, max_length=1_000_000)
+
 
 class CreateExecutionRequestDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -507,12 +512,14 @@ from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from typing import Any
 
+
 class DefinitionResponseDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
     definition_id: UUID
     workflow_name: str
     spec_version: str
     created_at_utc: datetime
+
 
 class ExecutionResponseDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -524,12 +531,14 @@ class ExecutionResponseDTO(BaseModel):
     created_at_utc: datetime
     updated_at_utc: datetime
 
+
 class FailureCauseDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
     category: str
     code: str
     message: str
     details: dict[str, Any] | None = None
+
 
 class TaskExecutionResponseDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -544,6 +553,7 @@ class TaskExecutionResponseDTO(BaseModel):
     created_at_utc: datetime
     updated_at_utc: datetime
 
+
 class ExecutionAttemptResponseDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
     attempt_id: UUID
@@ -557,11 +567,13 @@ class ExecutionAttemptResponseDTO(BaseModel):
     created_at_utc: datetime
     updated_at_utc: datetime
 
+
 class HistoryEntryResponseDTO(BaseModel):
     """
     Public representation of an immutable audit trail entry.
     Contains no synthetic monotonic sequence counter (ADR-014).
     """
+
     model_config = ConfigDict(frozen=True)
     history_id: UUID
     workflow_execution_id: UUID
@@ -650,6 +662,7 @@ Cursors encode monotonic database sort keys:
 import base64
 import json
 
+
 class CursorCodec:
     @staticmethod
     def encode(cursor_data: dict[str, Any]) -> str:
@@ -665,7 +678,7 @@ class CursorCodec:
             raise ApiHttpException(
                 status_code=400,
                 code="INVALID_CURSOR",
-                message="Pagination cursor is invalid or corrupt."
+                message="Pagination cursor is invalid or corrupt.",
             )
 ```
 
@@ -675,6 +688,7 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel
 
 T = TypeVar("T")
+
 
 class PaginatedListResponseDTO(BaseModel, Generic[T]):
     items: list[T]
@@ -784,6 +798,7 @@ from fastapi import Request
 from nexusflow.domain.security import SecurityContext, PrincipalType, PublicPermission
 from nexusflow.interfaces.http.errors import ApiHttpException
 
+
 class PublicAuthenticator:
     def __init__(self, configured_tokens: Mapping[str, frozenset[PublicPermission]]):
         # Precompute SHA-256 digests for configured secrets
@@ -798,7 +813,7 @@ class PublicAuthenticator:
             raise ApiHttpException(
                 status_code=401,
                 code="UNAUTHORIZED",
-                message="Missing or invalid Bearer authorization header."
+                message="Missing or invalid Bearer authorization header.",
             )
 
         supplied_token = auth_header[7:].strip()
@@ -809,13 +824,11 @@ class PublicAuthenticator:
                 return SecurityContext(
                     principal_id=principal_id,
                     principal_type=PrincipalType.PUBLIC_CLIENT,
-                    permissions=perms
+                    permissions=perms,
                 )
 
         raise ApiHttpException(
-            status_code=401,
-            code="UNAUTHORIZED",
-            message="Invalid Bearer credential."
+            status_code=401, code="UNAUTHORIZED", message="Invalid Bearer credential."
         )
 ```
 
@@ -825,12 +838,13 @@ from fastapi import Depends
 from nexusflow.interfaces.http.errors import ApiHttpException
 from nexusflow.ports.recovery import RecoveryGate
 
+
 def require_new_work_admitted(gate: RecoveryGate = Depends(get_recovery_gate)) -> None:
     if not gate.allows_new_work():
         raise ApiHttpException(
             status_code=503,
             code="NOT_READY",
-            message="Control plane is reconciling startup state. New work mutations blocked."
+            message="Control plane is reconciling startup state. New work mutations blocked.",
         )
 ```
 

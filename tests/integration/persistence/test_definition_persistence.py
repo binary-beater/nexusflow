@@ -95,12 +95,15 @@ tasks:
     dependencies: []
     max_attempts: 2
 """
-    val_outcome_1 = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_text_1))))
+    val_outcome_1 = SemanticValidator().validate(
+        normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_text_1)))
+    )
     assert val_outcome_1.success is not None
     spec_1 = val_outcome_1.success.spec
     fp_1 = compute_registration_fingerprint(serialize_validated_spec(spec_1))
 
     import uuid
+
     test_run_id = uuid.uuid4().hex[:8]
     idem_key = IdempotencyKey(f"demo-key-{test_run_id}")
     def_id_1 = DefinitionId.generate()
@@ -144,7 +147,11 @@ tasks:
     dependencies: []
     max_attempts: 5
 """
-    val_outcome_diff = SemanticValidator().validate(normalize_workflow_dto(WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_text_diff))))
+    val_outcome_diff = SemanticValidator().validate(
+        normalize_workflow_dto(
+            WorkflowDefinitionDTO.model_validate(parse_yaml_to_ast(yaml_text_diff))
+        )
+    )
     assert val_outcome_diff.success is not None
     spec_diff = val_outcome_diff.success.spec
     fp_diff = compute_registration_fingerprint(serialize_validated_spec(spec_diff))

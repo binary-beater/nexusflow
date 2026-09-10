@@ -8,14 +8,31 @@ from nexusflow.domain.json_compat import freeze_json, thaw_json
 
 def test_lifecycle_enums():
     assert [s.value for s in WorkflowState] == [
-        "INITIALIZING", "RUNNING", "FAILING", "CANCELLING", "SUCCEEDED", "FAILED", "CANCELLED"
+        "INITIALIZING",
+        "RUNNING",
+        "FAILING",
+        "CANCELLING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
     ]
     assert [s.value for s in TaskState] == [
-        "PENDING", "RUNNABLE", "RUNNING", "RETRY_WAIT", "SUCCEEDED", "FAILED", "CANCELLED"
+        "PENDING",
+        "RUNNABLE",
+        "RUNNING",
+        "RETRY_WAIT",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
     ]
     assert [s.value for s in AttemptState] == [
-        "CLAIMED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"
+        "CLAIMED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
     ]
+
 
 def test_freeze_json_primitives_and_collections():
     data = {
@@ -33,6 +50,7 @@ def test_freeze_json_primitives_and_collections():
     assert isinstance(frozen["list"][2], MappingProxyType)
     assert frozen["null"] is None
 
+
 def test_freeze_json_rejects_non_string_keys():
     with pytest.raises(TypeError, match="Object keys must be strings"):
         freeze_json({1: "integer_key"})
@@ -40,12 +58,14 @@ def test_freeze_json_rejects_non_string_keys():
     with pytest.raises(TypeError, match="Object keys must be strings"):
         freeze_json({None: "none_key"})
 
+
 def test_freeze_json_rejects_nan_and_inf():
     with pytest.raises(ValueError, match="NaN and Infinity"):
         freeze_json({"val": float("nan")})
 
     with pytest.raises(ValueError, match="NaN and Infinity"):
         freeze_json({"val": float("inf")})
+
 
 def test_thaw_json_round_trip():
     original = {
@@ -59,6 +79,7 @@ def test_thaw_json_round_trip():
     assert isinstance(thawed, dict)
     assert isinstance(thawed["items"], list)
     assert isinstance(thawed["meta"], dict)
+
 
 def test_thaw_json_rejects_invalid_keys():
     with pytest.raises(TypeError, match="must be strings"):

@@ -57,9 +57,7 @@ def create_app() -> FastAPI:
 
     # Standardized error handlers (ADR-018, LLD-08 Section 15)
     @app.exception_handler(ApiHttpException)
-    async def api_http_exception_handler(
-        request: Request, exc: ApiHttpException
-    ) -> JSONResponse:
+    async def api_http_exception_handler(request: Request, exc: ApiHttpException) -> JSONResponse:
         envelope = StandardErrorEnvelope(
             error=ErrorPayload(
                 code=exc.code,
@@ -92,9 +90,7 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         envelope = StandardErrorEnvelope(
             error=ErrorPayload(
                 code="INTERNAL_SERVER_ERROR",

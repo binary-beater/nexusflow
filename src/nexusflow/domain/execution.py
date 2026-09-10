@@ -132,7 +132,11 @@ class WorkflowExecution:
     updated_at_utc: datetime | None = None
 
     def is_terminal(self) -> bool:
-        return self.state in (WorkflowState.SUCCEEDED, WorkflowState.FAILED, WorkflowState.CANCELLED)
+        return self.state in (
+            WorkflowState.SUCCEEDED,
+            WorkflowState.FAILED,
+            WorkflowState.CANCELLED,
+        )
 
     def is_draining(self) -> bool:
         return self.state in (WorkflowState.FAILING, WorkflowState.CANCELLING)
@@ -145,7 +149,9 @@ def begin_running(wf: WorkflowExecution) -> TransitionResult[WorkflowExecution]:
     return TransitionApplied(entity=updated, event=SemanticEvent.WORKFLOW_STARTED)
 
 
-def complete_success(wf: WorkflowExecution, output_value: JsonValue) -> TransitionResult[WorkflowExecution]:
+def complete_success(
+    wf: WorkflowExecution, output_value: JsonValue
+) -> TransitionResult[WorkflowExecution]:
     if wf.state != WorkflowState.RUNNING:
         return TransitionRejected(f"Cannot succeed workflow in state '{wf.state}'")
     updated = replace(
@@ -180,7 +186,9 @@ class TaskExecution:
         return self.state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.CANCELLED)
 
 
-def mark_initially_runnable(task: TaskExecution, resolved_input: JsonObject) -> TransitionResult[TaskExecution]:
+def mark_initially_runnable(
+    task: TaskExecution, resolved_input: JsonObject
+) -> TransitionResult[TaskExecution]:
     """The ONLY path that materializes stable_input (PENDING -> RUNNABLE)."""
     if task.state != TaskState.PENDING:
         return TransitionRejected(f"Cannot mark initially RUNNABLE from state '{task.state}'")
@@ -233,7 +241,9 @@ class ExecutionAttempt:
         return self.state in (AttemptState.SUCCEEDED, AttemptState.FAILED, AttemptState.CANCELLED)
 
 
-def observe_attempt_start(attempt: ExecutionAttempt, now_utc: datetime) -> TransitionResult[ExecutionAttempt]:
+def observe_attempt_start(
+    attempt: ExecutionAttempt, now_utc: datetime
+) -> TransitionResult[ExecutionAttempt]:
     if attempt.state != AttemptState.CLAIMED:
         return TransitionRejected(f"Cannot transition to RUNNING from state '{attempt.state}'")
     if now_utc > attempt.start_deadline_utc:

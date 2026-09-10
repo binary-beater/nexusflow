@@ -58,7 +58,9 @@ async def session_factory():
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_a_partial_initializing_repair(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_a_partial_initializing_repair(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario A: Partial INITIALIZING repair."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -122,7 +124,9 @@ async def test_recovery_scenario_a_partial_initializing_repair(session_factory: 
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_b_retry_wait_survives_restart(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_b_retry_wait_survives_restart(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario B: RETRY_WAIT survives restart without changing timestamp if future."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -186,7 +190,9 @@ async def test_recovery_scenario_b_retry_wait_survives_restart(session_factory: 
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_c_runnable_survives_restart(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_c_runnable_survives_restart(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario C: RUNNABLE survives restart and is rediscovered."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -247,7 +253,9 @@ async def test_recovery_scenario_c_runnable_survives_restart(session_factory: as
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_d_claimed_restart_reconciliation(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_d_claimed_restart_reconciliation(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario D: CLAIMED restart reconciliation (lost session or start-deadline expiry)."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -329,7 +337,9 @@ async def test_recovery_scenario_d_claimed_restart_reconciliation(session_factor
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_e_running_restart_reconciliation(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_e_running_restart_reconciliation(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario E: RUNNING restart reconciliation (lost session / execution timeout)."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -412,7 +422,9 @@ async def test_recovery_scenario_e_running_restart_reconciliation(session_factor
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_f_failing_restart_drain_completion(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_f_failing_restart_drain_completion(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario F: FAILING restart drain completion."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
@@ -424,8 +436,20 @@ async def test_recovery_scenario_f_failing_restart_drain_completion(session_fact
     spec = ValidatedWorkflowSpec(
         workflow_name="scen_f_wf",
         tasks={
-            t_id1_def: TaskDefinition(id=t_id1_def, activity_type=ActivityType("act1"), dependencies=frozenset(), input_bindings={}, max_attempts=1),
-            t_id2_def: TaskDefinition(id=t_id2_def, activity_type=ActivityType("act2"), dependencies=frozenset(), input_bindings={}, max_attempts=1),
+            t_id1_def: TaskDefinition(
+                id=t_id1_def,
+                activity_type=ActivityType("act1"),
+                dependencies=frozenset(),
+                input_bindings={},
+                max_attempts=1,
+            ),
+            t_id2_def: TaskDefinition(
+                id=t_id2_def,
+                activity_type=ActivityType("act2"),
+                dependencies=frozenset(),
+                input_bindings={},
+                max_attempts=1,
+            ),
         },
         output_bindings={},
     )
@@ -502,7 +526,9 @@ async def test_recovery_scenario_f_failing_restart_drain_completion(session_fact
 
 
 @pytest.mark.asyncio
-async def test_recovery_scenario_g_cancelling_restart_drain_completion(session_factory: async_sessionmaker[AsyncSession]):
+async def test_recovery_scenario_g_cancelling_restart_drain_completion(
+    session_factory: async_sessionmaker[AsyncSession],
+):
     """Scenario G: CANCELLING restart drain completion."""
     now_utc = datetime.now(UTC)
     wf_id = WorkflowExecutionId.generate()
